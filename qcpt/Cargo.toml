@@ -8,4 +8,8 @@ license.workspace = true
 rust-version = "1.74.0"
 
 [dependencies]
-
+anstyle = "1.0.8"
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["wrap_help", "derive", "cargo", "help"] }
+rcgen = "0.13"
+#quinn = { workspace = true }

@@ -8,6 +8,11 @@ package.edition = "2021"
 package.authors = ["Ross Younger <crazyscot@gmail.com>"]
 package.license = "AGPL-3.0-or-later"
 
+[workspace.dependencies]
+anyhow = "1.0.88"
+clap = "4.5"
+quinn = "0.11"
+
 [workspace.lints.rust]
 dead_code = "warn"
 elided_lifetimes_in_paths = "deny"
