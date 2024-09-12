@@ -13,3 +13,6 @@ anyhow = { workspace = true }
 clap = { workspace = true, features = ["wrap_help", "derive", "cargo", "help"] }
 rcgen = "0.13"
 #quinn = { workspace = true }
+
+[build-dependencies]
+built = { version = "0.7.4", features = ["git2"] }

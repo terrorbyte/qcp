@@ -3,8 +3,12 @@
 use clap::Parser;
 
 #[derive(Debug, Parser)]
-#[command(author, version, about, long_about = "QCP transport utility")]
-//#[command(author(clap::crate_authors!()), version, about, long_about = "QCP transport utility")]
+#[command(
+    author,
+    version(crate::build_info::GIT_VERSION),
+    about,
+    long_about = "QCP transport utility"
+)]
 #[command(help_template(
     "\
 {before-help}{name} {version}
