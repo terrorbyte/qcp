@@ -1,0 +1,11 @@
+[package]
+name = "qcpt"
+description = "QCP transport low-level utility"
+edition.workspace = true
+authors.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version = "1.74.0"
+
+[dependencies]
+
