@@ -5,9 +5,15 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 
 /// In-memory represenatation of X509 credentials (for TLS)
 pub struct Credentials {
-    certificate: CertificateDer<'static>,
-    keypair: PrivateKeyDer<'static>,
+    pub certificate: CertificateDer<'static>,
+    pub keypair: PrivateKeyDer<'static>,
 }
+
+/*
+fn dump(creds: &rcgen::CertifiedKey) {
+    println!("{}{}\n", creds.cert.pem(), creds.key_pair.serialize_pem());
+}
+*/
 
 impl Credentials {
     pub fn generate() -> Result<Self> {
@@ -19,6 +25,10 @@ impl Credentials {
             certificate: raw.cert.der().clone(),
             keypair: rustls_pki_types::PrivateKeyDer::Pkcs8(raw.key_pair.serialize_der().into()),
         })
+    }
+
+    pub fn cert_chain(&self) -> Vec<CertificateDer<'static>> {
+        vec![self.certificate.clone()]
     }
 }
 

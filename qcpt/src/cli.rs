@@ -2,6 +2,8 @@
 /// (c) 2024 Ross Younger
 use clap::Parser;
 
+use crate::server;
+
 #[derive(Debug, Parser)]
 #[command(
     author,
@@ -30,13 +32,13 @@ pub struct Cli {
 //#[command(flatten_help = true)]
 /// Subcommands
 pub enum Commands {
-    Dummy,
+    Server(server::cli::ServerArgs),
 }
 
 /// Main CLI entrypoint
 pub fn cli_main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Dummy => Ok(()),
+        Commands::Server(args) => server::cli::server(&args),
     }
 }
