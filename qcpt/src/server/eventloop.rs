@@ -7,7 +7,8 @@ use std::{
 };
 
 use crate::cert::Credentials;
-use anyhow::{anyhow, Result};
+
+use anyhow::{anyhow, Context as _, Result};
 use quinn::crypto::rustls::QuicServerConfig;
 use rustls::{server::WebPkiClientVerifier, RootCertStore};
 use rustls_pki_types::CertificateDer;
@@ -133,15 +134,50 @@ impl QcpServer<'_> {
     async fn handle_request(
         (mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
     ) -> Result<()> {
-        let req = recv
-            .read_to_end(64)
-            .await
-            .map_err(|e| anyhow!("failed reading client request: {}", e))?;
+        use capnp::serialize_packed;
+        use qcp::protocol::session::{
+            decode_length,
+            session_capnp::command::{self, args::Which},
+            COMMAND_RESPONSE_MAX_LENGTH,
+        };
 
-        // TODO: Handle request
-        info!("TODO: Got data from client size {}", req.len());
-        // It might be Get or Put; start processing it.
-        // If it's Put, it will be followed by data !
+        // Message length
+        let raw = recv
+            .read_to_end(2)
+            .await
+            .map_err(|e| anyhow!("failed to read client packet size: {}", e))?;
+        let len = decode_length(&raw);
+        if len > COMMAND_RESPONSE_MAX_LENGTH {
+            anyhow::bail!("command too long");
+        }
+
+        // Message data
+        let raw = recv
+            .read_to_end(len.into())
+            .await
+            .map_err(|e| anyhow!("failed to read command packet: {}", e))?;
+        let reader =
+            serialize_packed::read_message(raw.as_slice(), ::capnp::message::ReaderOptions::new())?;
+
+        let cmd: command::Reader = reader
+            .get_root()
+            .with_context(|| "Parsing control message from client")?;
+        let args = cmd.get_args();
+        match args.which()? {
+            Which::Get(args) => {
+                let getx_args: command::get_x_args::Reader = args?;
+                let filename: capnp::text::Reader = getx_args.get_filename()?;
+                println!("Get {}", filename.to_string()?);
+            }
+            Which::Put(args) => {
+                let putx_args: command::put_x_args::Reader = args?;
+                let filename: capnp::text::Reader = putx_args.get_filename()?;
+                let size = putx_args.get_size();
+                println!("Put {}, size {size}", filename.to_string()?);
+            }
+        };
+
+        info!("TODO: Handle request");
         Ok(send.finish()?)
     }
 
