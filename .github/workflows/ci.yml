@@ -31,7 +31,7 @@ jobs:
         key: "${{matrix.platform}}"
     - name: install packages (ubuntu)
       if: matrix.platform == 'ubuntu-22.04'
-      run: sudo apt-get update && sudo apt-get -y --no-install-recommends install mold
+      run: sudo apt-get update && sudo apt-get -y --no-install-recommends install mold capnproto
     - name: Build
       run: cargo build --locked
 
@@ -44,7 +44,7 @@ jobs:
         with:
           key: ubuntu-22.04
       - name: install packages
-        run: sudo apt-get update && sudo apt-get -y --no-install-recommends install mold
+        run: sudo apt-get update && sudo apt-get -y --no-install-recommends install mold capnproto
       # Checks begin here!
       - run: cargo fmt --all -- --check
       - run: cargo test --locked

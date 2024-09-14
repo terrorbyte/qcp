@@ -13,6 +13,8 @@ package.license = "AGPL-3.0-or-later"
 anstyle = "1.0.8"
 anyhow = "1.0.88"
 clap = "4.5"
+capnp = "0.19"
+capnpc = "0.19"
 
 [workspace.lints.rust]
 dead_code = "warn"
