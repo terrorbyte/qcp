@@ -23,7 +23,8 @@ pub struct ServerArgs {
 }
 
 /// Implementation of 'server' mode
-pub fn server(args: &ServerArgs) -> anyhow::Result<()> {
+#[tokio::main]
+pub async fn server(args: &ServerArgs) -> anyhow::Result<()> {
     let client_cert: Option<CertificateDer<'static>> = if args.insecure {
         // Insecure mode: no certificate required
         None
@@ -38,11 +39,11 @@ pub fn server(args: &ServerArgs) -> anyhow::Result<()> {
         Some(cert)
     };
 
-    let event_loop = QcpServer::new(args.port, client_cert)?;
+    let mut event_loop = QcpServer::new(args.port, client_cert)?;
     let message: ServerMessage = (&event_loop).try_into()?;
     // TODO: There's probably a tidier way to format the messages, but serde will do for now.
     println!("{}", serde_json::to_string(&message)?);
-
-    // TODO: run the event loop...
+    event_loop.run().await?;
+    println!("Server stats: {}", event_loop.stats());
     Ok(())
 }
