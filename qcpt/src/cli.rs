@@ -7,7 +7,7 @@ use crate::server;
 #[derive(Debug, Parser)]
 #[command(
     author,
-    version(crate::build_info::GIT_VERSION),
+    version(qcp::build_info::GIT_VERSION),
     about,
     long_about = "QCP transport utility"
 )]
