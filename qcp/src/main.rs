@@ -8,7 +8,7 @@ use tracing::{error, Level};
 fn main() -> anyhow::Result<()> {
     let args = ClientArgs::parse();
     let trace_level = match args.debug {
-        true => Level::DEBUG,
+        true => Level::TRACE,
         false => match args.quiet {
             true => Level::ERROR,
             false => Level::INFO,

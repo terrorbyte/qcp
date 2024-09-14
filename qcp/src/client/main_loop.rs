@@ -10,19 +10,21 @@ use quinn::crypto::rustls::QuicClientConfig;
 use quinn::rustls;
 use rustls::RootCertStore;
 use rustls_pki_types::CertificateDer;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tokio::{self, io::AsyncReadExt, time::timeout, time::Duration};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, span, trace, Level};
 
 use super::ClientArgs;
 
 /// Main CLI entrypoint
 #[tokio::main]
 pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
+    let server_hostname = "localhost"; // TEMP; this will come from parsed args
+
     let credentials = crate::cert::Credentials::generate()?;
 
     info!("connecting to remote");
@@ -56,23 +58,29 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
         server_message.port
     );
 
-    // Update server side to use new thinking.
-    // resolve hostname -> IPaddr
-    // prep SockAddr (server IP, port from server message)
-    let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-    let temp_cert_data = [0u8; 1];
-    let server_cert = CertificateDer::from_slice(&temp_cert_data); // TEMP
-    let _endpoint = create_endpoint(&credentials, server_cert, address)?;
+    let server_host_port = format!("{server_hostname}:{}", server_message.port);
+    let server_address = tokio::net::lookup_host(server_host_port)
+        .await
+        .map_err(|e| {
+            error!("host name lookup failed1");
+            e
+        })?
+        .next()
+        .ok_or_else(|| {
+            error!("host name lookup failed2");
+            anyhow::anyhow!("host name lookup failed")
+        })?;
+    let _endpoint = create_endpoint(&credentials, server_message.cert.into(), server_address)?;
 
     info!("Work in progress...");
-    // LATER: Connect. Run the protocol given CLI args.
+    // NEXT: Connect. Run the protocol given CLI args.
     // Arrange a graceful termination. Close down the endpoint, terminate the subprocess.
     Ok(())
 }
 
 fn launch_server() -> Result<Child> {
     let server = Command::new("qcpt")
-        .args(["server"])
+        .args(["--debug"]) // TEMP
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit()) // TODO: pipe this more nicely, output on error?
@@ -106,19 +114,28 @@ pub fn create_endpoint(
     server_cert: CertificateDer<'_>,
     destination: SocketAddr,
 ) -> Result<quinn::Endpoint> {
+    let span = span!(Level::TRACE, "create_endpoint");
+    let _guard = span.enter();
+    trace!("Set up root store");
     let mut root_store = RootCertStore::empty();
-    root_store.add(server_cert)?;
+    root_store.add(server_cert).map_err(|e| {
+        error!("{e}");
+        e
+    })?;
     let root_store = Arc::new(root_store);
 
+    trace!("create tls_config");
     let tls_config = Arc::new(
         rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_client_auth_cert(credentials.cert_chain(), credentials.keypair.clone_key())?,
     );
 
+    trace!("create client config");
     let qcc = Arc::new(QuicClientConfig::try_from(tls_config)?);
     let config = quinn::ClientConfig::new(qcc);
 
+    trace!("create endpoint");
     let mut endpoint = quinn::Endpoint::client(destination)?;
     endpoint.set_default_client_config(config);
 
