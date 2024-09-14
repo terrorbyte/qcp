@@ -11,6 +11,7 @@ rust-version = "1.74.0"
 anstyle = { workspace = true }
 anyhow = { workspace = true }
 capnp = { workspace = true }
+clap = { workspace = true, features = ["wrap_help", "derive", "cargo", "help"] }
 gethostname = "0.5"
 rcgen = { version = "0.13", features = ["crypto", "pem", "ring"], default-features = false }
 rustls-pki-types = { workspace = true }

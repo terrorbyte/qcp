@@ -595,6 +595,7 @@ dependencies = [
  "built",
  "capnp",
  "capnpc",
+ "clap",
  "gethostname",
  "rcgen",
  "rustls-pki-types",

@@ -20,7 +20,7 @@ use crate::server;
 {all-args}{after-help}
 "
 ))]
-#[command(styles=crate::styles::get())]
+#[command(styles=qcp::styles::get())]
 /// Top-level CLI definition
 pub struct Cli {
     #[command(subcommand)]
