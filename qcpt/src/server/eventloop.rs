@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::cert::Credentials;
+use qcp::cert::Credentials;
 
 use anyhow::{anyhow, Context as _, Result};
 use quinn::crypto::rustls::QuicServerConfig;

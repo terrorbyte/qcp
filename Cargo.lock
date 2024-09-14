@@ -595,6 +595,9 @@ dependencies = [
  "built",
  "capnp",
  "capnpc",
+ "gethostname",
+ "rcgen",
+ "rustls-pki-types",
 ]
 
 [[package]]
@@ -607,10 +610,8 @@ dependencies = [
  "bytes",
  "capnp",
  "clap",
- "gethostname",
  "qcp",
  "quinn",
- "rcgen",
  "rustls",
  "rustls-pki-types",
  "serde",
