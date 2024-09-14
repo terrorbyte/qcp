@@ -8,7 +8,7 @@
  * On the wire these look like:
  *   <length> <capnproto-encoded-struct>
  *
- * Length is a u16 in NETWORK BYTE ORDER.
+ * Integers are encoded in NETWORK BYTE ORDER.
  */
 
 pub mod session_capnp {
