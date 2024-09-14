@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "qcpt"
+    "qcp",
+    "qcpt",
 ]
 resolver = "2"
 package.version = "0.1.0"
@@ -9,6 +10,7 @@ package.authors = ["Ross Younger <crazyscot@gmail.com>"]
 package.license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
+anstyle = "1.0.8"
 anyhow = "1.0.88"
 clap = "4.5"
 

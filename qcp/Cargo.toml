@@ -1,0 +1,15 @@
+[package]
+name = "qcp"
+description = "QCP file copy utility"
+edition.workspace = true
+authors.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version = "1.74.0"
+
+[dependencies]
+anstyle = { workspace = true }
+anyhow = { workspace = true }
+
+[build-dependencies]
+built = { version = "0.7.4", features = ["git2"] }

@@ -563,6 +563,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "qcp"
+version = "0.1.0"
+dependencies = [
+ "anstyle",
+ "anyhow",
+ "built",
+]
+
+[[package]]
 name = "qcpt"
 version = "0.1.0"
 dependencies = [
