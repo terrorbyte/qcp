@@ -23,27 +23,25 @@ use super::ClientArgs;
 /// Main CLI entrypoint
 #[tokio::main]
 pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
-    use crate::protocol::control::ClientMessage;
-
     let credentials = crate::cert::Credentials::generate()?;
 
     info!("connecting to remote");
     let mut server = launch_server()?;
 
     wait_for_banner(&mut server, args.timeout).await?;
-    let client_msg = ClientMessage::encode(&credentials.certificate);
-    trace!("client message size {}", client_msg.len());
 
     let server_input = server.stdin.take().unwrap();
     {
         let mut msg = ::capnp::message::Builder::new_default();
         let mut client_msg = msg.init_root::<control_capnp::client_message::Builder>();
         client_msg.set_cert(&credentials.certificate);
+        trace!("sending client message");
         capnp_futures::serialize::write_message(server_input.compat_write(), msg).await?;
     }
 
     let server_output = server.stdout.take().unwrap();
     let server_message = {
+        trace!("reading server message");
         let reader =
             capnp_futures::serialize::read_message(server_output.compat(), ReaderOptions::new())
                 .await?;
