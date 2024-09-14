@@ -52,8 +52,8 @@ impl ClientMessage {
 
 /// Rust type analogue to the capnproto struct
 pub struct ServerMessage {
-    port: u16,
-    cert: Vec<u8>,
+    pub port: u16,
+    pub cert: Vec<u8>,
 }
 
 impl ServerMessage {

@@ -2,7 +2,7 @@
 // (c) 2024 Ross Younger
 
 pub mod cert;
-pub mod cli;
+pub mod client;
 pub mod protocol;
 pub mod styles;
 

@@ -12,10 +12,14 @@ package.license = "AGPL-3.0-or-later"
 [workspace.dependencies]
 anstyle = "1.0.8"
 anyhow = "1.0.88"
+bytes = { version = "1.7.1", default-features = false }
 clap = "4.5"
 capnp = "0.19"
 capnpc = "0.19"
+quinn = "0.11"
 rustls-pki-types = "1.8"
+tokio = { version = "1.40.0", features = ["full", "io-std"] }
+tracing = "0.1.40"
 
 [workspace.lints.rust]
 dead_code = "warn"

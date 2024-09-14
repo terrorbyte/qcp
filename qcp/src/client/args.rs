@@ -1,6 +1,6 @@
+// qcp command line interface
+// (c) 2024 Ross Younger
 use crate::build_info;
-/// qcp command line interface
-/// (c) 2024 Ross Younger
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -20,16 +20,19 @@ use clap::Parser;
 "
 ))]
 #[command(styles=crate::styles::get())]
-/// Top-level CLI definition
-pub struct Cli {
+/// The arguments we need to set up a client
+pub struct ClientArgs {
+    /// Enable detailed debug output
+    #[arg(short, long, action)]
+    pub debug: bool,
+    /// Quiet mode (reduced chatter)
+    #[arg(short, long, action)]
+    pub quiet: bool,
+    /// Connection timeout (seconds)
+    #[arg(short, long, default_value("1"))]
+    pub timeout: u16,
     // TODO!
     // This will become something scp-like.
     // qcp [options...] FILE [FILE...] SERVER:DESTDIR/DESTFILE
     // qcp [options...] SERVER:FILE DESTDIR/DESTFILE
-}
-
-/// Main CLI entrypoint
-pub fn cli_main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    Ok(())
 }

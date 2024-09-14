@@ -10,17 +10,17 @@ rust-version = "1.74.0"
 [dependencies]
 anstyle = { workspace = true }
 anyhow = { workspace = true }
-bytes = { version = "1.7.1", default-features = false }
+bytes = { workspace = true }
 capnp = { workspace = true }
 clap = { workspace = true, features = ["wrap_help", "derive", "cargo", "help"] }
 qcp = { path = "../qcp" }
-quinn = { version = "0.11" }
+quinn = { workspace = true }
 rustls = { version = "0.23.13", default-features = false, features = ["ring", "std"] }
 rustls-pki-types = { workspace = true }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
-tokio = { version = "1.40.0", features = ["full", "io-std"] }
-tracing = "0.1.40"
+tokio = { workspace = true }
+tracing = { workspace = true }
 
 [build-dependencies]
 built = { version = "0.7.4", features = ["git2"] }
