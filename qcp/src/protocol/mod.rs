@@ -1,5 +1,4 @@
-// Wire protocol formats for qcp
-// (c) 2024 Ross Younger
+// qcp::protocol
 
 pub mod control;
 pub mod session;

@@ -1,4 +1,4 @@
-// qcp command line interface
+// qcp client - command line interface
 // (c) 2024 Ross Younger
 use crate::build_info;
 use clap::Parser;

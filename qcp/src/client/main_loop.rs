@@ -1,4 +1,4 @@
-// qcp client structure and event loop
+// qcp client event loop
 // (c) 2024 Ross Younger
 
 use crate::protocol::control::{control_capnp, ServerMessage};

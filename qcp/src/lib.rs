@@ -1,4 +1,4 @@
-// QCP library routines
+// QCP client & server library
 // (c) 2024 Ross Younger
 
 pub mod cert;

@@ -1,5 +1,6 @@
-/// Local X509 certificate management
-/// (c) 2024 Ross Younger
+// X509 certificate management
+// (c) 2024 Ross Younger
+
 use anyhow::Result;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 

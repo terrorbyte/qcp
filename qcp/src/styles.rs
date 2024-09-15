@@ -1,4 +1,5 @@
-/// Default styling for clap output
+// Default styling for qcp's help output
+
 #[must_use]
 pub fn get() -> clap::builder::Styles {
     clap::builder::Styles::styled()
