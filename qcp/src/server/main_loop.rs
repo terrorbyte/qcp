@@ -13,9 +13,12 @@ use quinn::crypto::rustls::QuicServerConfig;
 use quinn::rustls::server::WebPkiClientVerifier;
 use quinn::rustls::{self, RootCertStore};
 use rustls_pki_types::CertificateDer;
-use tokio::io::Stdin;
+use tokio::io::{AsyncWriteExt as _, Stdin};
+use tokio::time::Duration;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, info, trace, trace_span};
+use tracing::{debug, error, info, trace, trace_span};
+
+const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Main entrypoint
 #[tokio::main]
@@ -23,11 +26,14 @@ pub async fn server_main() -> anyhow::Result<()> {
     let span = trace_span!("SERVER");
     let _guard = span.enter();
 
-    let credentials = crate::cert::Credentials::generate()?;
-
-    print!("{}", protocol::control::BANNER);
     let stdin = tokio::io::stdin().compat();
-    let stdout = tokio::io::stdout().compat_write();
+    let mut stdout = unbuffered_stdout();
+
+    stdout
+        .write_all(protocol::control::BANNER.as_bytes())
+        .await?;
+
+    let credentials = crate::cert::Credentials::generate()?;
     let client_message = read_client_message(stdin).await.unwrap_or_else(|e| {
         // try to be helpful if there's a human reading
         eprintln!("ERROR: This program expects a binary data packet on stdin.\n{e}");
@@ -45,11 +51,38 @@ pub async fn server_main() -> anyhow::Result<()> {
         server_msg.set_port(endpoint.local_addr()?.port());
         server_msg.set_name(&credentials.hostname);
         trace!("sending server message");
-        capnp_futures::serialize::write_message(stdout, msg).await?;
+        capnp_futures::serialize::write_message(stdout.compat_write(), msg).await?;
     }
 
-    // NEXT: Control channel setup
+    // TODO: Timeout if nobody connects?
+
+    trace!("waiting for connection");
+    if let Some(conn) = endpoint.accept().await {
+        let fut = handle_connection(conn);
+        tokio::spawn(async move {
+            if let Err(e) = fut.await {
+                error!("inward stream failed: {reason}", reason = e.to_string());
+            }
+        });
+    }
+    // TODO: This sleep is a bit naff, but without it there is a race. Sometimes we get here
+    // before the connection has been handled, so it looks idle.
+    // Perhaps add a Finished command on the control channel ?
+    tokio::time::sleep(PROTOCOL_TIMEOUT).await;
+
+    // Graceful closedown. Wait for all connections and streams to finish.
+    info!("waiting for completion");
+    endpoint.wait_idle().await;
+    trace!("finished");
     Ok(())
+}
+
+#[cfg(unix)]
+fn unbuffered_stdout() -> tokio::fs::File {
+    use std::os::fd::AsFd;
+    let owned = std::io::stdout().as_fd().try_clone_to_owned().unwrap();
+    let file = std::fs::File::from(owned);
+    tokio::fs::File::from_std(file)
 }
 
 async fn read_client_message(stdin: Compat<Stdin>) -> anyhow::Result<ClientMessage> {
@@ -82,4 +115,29 @@ fn create_endpoint(
     let endpoint = quinn::Endpoint::server(config, addr)?;
 
     Ok(endpoint)
+}
+
+async fn handle_connection(conn: quinn::Incoming) -> anyhow::Result<()> {
+    let span = trace_span!("incoming");
+    let _guard = span.enter();
+
+    let connection = conn.await?;
+    info!("accepted connection from {}", connection.remote_address());
+
+    loop {
+        let stream = connection.accept_bi().await;
+        let _stream = match stream {
+            Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
+                info!("connection closed");
+                return Ok(());
+            }
+            Err(e) => {
+                error!("propagate: {e}");
+                return Err(e.into());
+            }
+            Ok(s) => s,
+        };
+        // TODO: handle commands ...
+        info!("opened stream");
+    }
 }

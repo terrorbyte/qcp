@@ -45,7 +45,7 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
 
     let server_output = server.stdout.take().unwrap();
     let server_message = {
-        trace!("reading server message");
+        trace!("waiting for server message");
         let reader =
             capnp_futures::serialize::read_message(server_output.compat(), ReaderOptions::new())
                 .await?;
@@ -78,20 +78,32 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
     trace!("Connecting to {server_address:?}");
     trace!("Local connection address is {:?}", endpoint.local_addr()?);
     // TODO timeout?
-    let _connection = endpoint.connect(server_address, &server_message.name)?;
+    let connection = endpoint
+        .connect(server_address, &server_message.name)?
+        .await?;
+
+    connection.send_datagram("hello".as_bytes().into())?;
 
     info!("Work in progress...");
+    // TODO: Send some commands
+    let _temp_stream = connection.open_bi();
 
-    // Arrange a graceful termination. Close down the endpoint, terminate the subprocess.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    info!("shutting down");
+    connection.close(0u8.into(), "".as_bytes());
+    endpoint.wait_idle().await;
+    server.wait().await?;
     Ok(())
 }
 
 fn launch_server() -> Result<Child> {
     let server = Command::new("qcpt")
-        .args(["--debug"]) // TEMP
+        .args(["--debug"]) // TEMP; TODO make this configurable
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit()) // TODO: pipe this more nicely, output on error?
+        .kill_on_drop(true)
         .spawn()
         .context("Could not launch remote server")?;
     Ok(server)
