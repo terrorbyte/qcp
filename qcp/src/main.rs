@@ -3,24 +3,19 @@
 use clap::Parser as _;
 use qcp::client::ClientArgs;
 
-use tracing::{error, Level};
-
 fn main() -> anyhow::Result<()> {
     let args = ClientArgs::parse();
     let trace_level = match args.debug {
-        true => Level::TRACE,
+        true => "trace",
         false => match args.quiet {
-            true => Level::ERROR,
-            false => Level::INFO,
+            true => "error",
+            false => "info",
         },
     };
-    tracing_subscriber::fmt()
-        .with_max_level(trace_level)
-        .compact()
-        .init();
+    qcp::util::setup_tracing(trace_level)?;
 
     qcp::client::main(&args).map_err(|e| {
-        error!("{e}");
+        tracing::error!("{e}");
         // TODO: Decide about error handling. For now detailed anyhow output is fine.
         e
     })

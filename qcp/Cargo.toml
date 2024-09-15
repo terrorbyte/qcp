@@ -20,7 +20,7 @@ rustls-pki-types = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat"] }
 tracing = { workspace = true }
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 built = { version = "0.7.4", features = ["git2"] }
