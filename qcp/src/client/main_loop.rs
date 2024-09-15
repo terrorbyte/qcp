@@ -10,21 +10,23 @@ use quinn::crypto::rustls::QuicClientConfig;
 use quinn::rustls;
 use rustls::RootCertStore;
 use rustls_pki_types::CertificateDer;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tokio::{self, io::AsyncReadExt, time::timeout, time::Duration};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, error, info, span, trace, Level};
+use tracing::{debug, error, info, span, trace, trace_span, Level};
 
 use super::ClientArgs;
 
 /// Main CLI entrypoint
 #[tokio::main]
 pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
-    let server_hostname = "localhost"; // TEMP; this will come from parsed args
+    let server_hostname = "127.0.0.1"; // TEMP; this will come from parsed args
 
+    let span = trace_span!("CLIENT");
+    let _guard = span.enter();
     let credentials = crate::cert::Credentials::generate()?;
 
     info!("connecting to remote");
@@ -50,12 +52,14 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
         let msg_reader: control_capnp::server_message::Reader = reader.get_root()?;
         let cert = Vec::<u8>::from(msg_reader.get_cert()?);
         let port = msg_reader.get_port();
-        ServerMessage { port, cert }
+        let name = msg_reader.get_name()?.to_string()?;
+        ServerMessage { port, cert, name }
     };
     debug!(
-        "Got server message; cert length {}, port {}",
+        "Got server message; cert length {}, port {}, hostname {}",
         server_message.cert.len(),
-        server_message.port
+        server_message.port,
+        server_message.name
     );
 
     let server_host_port = format!("{server_hostname}:{}", server_message.port);
@@ -70,10 +74,14 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
             error!("host name lookup failed2");
             anyhow::anyhow!("host name lookup failed")
         })?;
-    let _endpoint = create_endpoint(&credentials, server_message.cert.into(), server_address)?;
+    let endpoint = create_endpoint(&credentials, server_message.cert.into())?;
+    trace!("Connecting to {server_address:?}");
+    trace!("Local connection address is {:?}", endpoint.local_addr()?);
+    // TODO timeout?
+    let _connection = endpoint.connect(server_address, &server_message.name)?;
 
     info!("Work in progress...");
-    // NEXT: Connect. Run the protocol given CLI args.
+
     // Arrange a graceful termination. Close down the endpoint, terminate the subprocess.
     Ok(())
 }
@@ -112,7 +120,6 @@ async fn wait_for_banner(server: &mut Child, timeout_s: u16) -> Result<()> {
 pub fn create_endpoint(
     credentials: &Credentials,
     server_cert: CertificateDer<'_>,
-    destination: SocketAddr,
 ) -> Result<quinn::Endpoint> {
     let span = span!(Level::TRACE, "create_endpoint");
     let _guard = span.enter();
@@ -136,7 +143,8 @@ pub fn create_endpoint(
     let config = quinn::ClientConfig::new(qcc);
 
     trace!("create endpoint");
-    let mut endpoint = quinn::Endpoint::client(destination)?;
+    let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
+    let mut endpoint = quinn::Endpoint::client(addr.into())?;
     endpoint.set_default_client_config(config);
 
     Ok(endpoint)

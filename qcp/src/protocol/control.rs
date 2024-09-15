@@ -31,8 +31,12 @@ pub struct ClientMessage {
 
 /// Rust type analogue to the capnproto struct
 pub struct ServerMessage {
+    /// Port the server is bound to
     pub port: u16,
+    /// Certificate data (DER encoded)
     pub cert: Vec<u8>,
+    /// Server's idea of its hostname (should match the certificate)
+    pub name: String,
 }
 
 #[cfg(test)]
@@ -71,7 +75,11 @@ mod tests {
         let msg_reader: server_message::Reader = reader.get_root()?;
         let cert = Vec::<u8>::from(msg_reader.get_cert()?);
         let port = msg_reader.get_port();
-        Ok(ServerMessage { port, cert })
+        Ok(ServerMessage {
+            port,
+            cert,
+            name: "localhost".to_string(),
+        })
     }
 
     #[test]

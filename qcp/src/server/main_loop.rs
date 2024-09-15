@@ -15,11 +15,14 @@ use quinn::rustls::{self, RootCertStore};
 use rustls_pki_types::CertificateDer;
 use tokio::io::Stdin;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, info, trace};
+use tracing::{debug, info, trace, trace_span};
 
 /// Main entrypoint
 #[tokio::main]
 pub async fn server_main() -> anyhow::Result<()> {
+    let span = trace_span!("SERVER");
+    let _guard = span.enter();
+
     let credentials = crate::cert::Credentials::generate()?;
 
     print!("{}", protocol::control::BANNER);
@@ -34,12 +37,13 @@ pub async fn server_main() -> anyhow::Result<()> {
 
     // TODO: Allow port to be specified
     let endpoint = create_endpoint(&credentials, client_message.cert.into())?;
-    info!("bound endpoint to port {}", endpoint.local_addr()?.port());
+    info!("Server endpoint port={}", endpoint.local_addr()?.port());
     {
         let mut msg = ::capnp::message::Builder::new_default();
         let mut server_msg = msg.init_root::<control_capnp::server_message::Builder>();
         server_msg.set_cert(&credentials.certificate);
         server_msg.set_port(endpoint.local_addr()?.port());
+        server_msg.set_name(&credentials.hostname);
         trace!("sending server message");
         capnp_futures::serialize::write_message(stdout, msg).await?;
     }
