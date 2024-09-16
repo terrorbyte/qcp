@@ -55,17 +55,15 @@ pub async fn server_main() -> anyhow::Result<()> {
         capnp_futures::serialize::write_message(stdout.compat_write(), msg).await?;
     }
 
-    // TODO: Timeout if nobody connects?
-
     loop {
         // Control channel main loop.
         // Wait for new connections OR for stdin to be closed.
 
         let mut buf = [0u8; 1];
         let endpoint_fut = endpoint.accept();
-        tokio::pin!(endpoint_fut);
         let stdin_fut = stdin.read(&mut buf);
-        tokio::pin!(stdin_fut);
+        let timeout_fut = tokio::time::sleep(PROTOCOL_TIMEOUT);
+        tokio::pin!(endpoint_fut, stdin_fut, timeout_fut);
 
         tokio::select! {
             s = &mut stdin_fut => {
@@ -96,7 +94,11 @@ pub async fn server_main() -> anyhow::Result<()> {
                         });
                     },
                 };
-            }
+            },
+            _ = &mut timeout_fut => {
+                debug!("Timed out waiting for connection");
+                break;
+            },
         };
     }
 
