@@ -17,9 +17,11 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::{self, io::AsyncReadExt, time::timeout, time::Duration};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, error, info, span, trace, trace_span, Level};
+use tracing::{debug, error, info, span, trace, trace_span, warn, Level};
 
 use super::ClientArgs;
+
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Main CLI entrypoint
 #[tokio::main]
@@ -76,24 +78,42 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
             anyhow::anyhow!("host name lookup failed")
         })?;
     let endpoint = create_endpoint(&credentials, server_message.cert.into())?;
+
     trace!("Connecting to {server_address:?}");
     trace!("Local connection address is {:?}", endpoint.local_addr()?);
-    // TODO timeout?
-    let connection = endpoint
-        .connect(server_address, &server_message.name)?
-        .await?;
 
-    connection.send_datagram("hello".as_bytes().into())?;
+    let connection_fut = endpoint.connect(server_address, &server_message.name)?;
+    let timeout_fut = tokio::time::sleep(CONNECTION_TIMEOUT);
+    tokio::pin!(connection_fut, timeout_fut);
 
-    info!("Work in progress...");
-    // TODO: Send some commands
-    let _temp_stream = connection.open_bi();
+    let connection = tokio::select! {
+        _ = timeout_fut => {
+            warn!("UDP connection to QUIC endpoint timed out");
+            endpoint.close(0u32.into(), &[0u8;0]);
+            None
+        },
+        c = &mut connection_fut => {
+            match c {
+                Ok(conn) => Some(conn),
+                Err(e) => {
+                    warn!("Error connecting: {e}");
+                    None
+                },
+            }
+        },
+    };
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    if let Some(ref c) = connection {
+        info!("Work in progress...");
+        // TODO: Send some commands
+        let _temp_stream = c.open_bi();
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 
     info!("shutting down");
     server_input.into_inner().shutdown().await?;
-    connection.close(0u8.into(), "".as_bytes());
+    let _ = connection.map(|c| c.close(0u8.into(), "".as_bytes()));
     endpoint.wait_idle().await;
     server.wait().await?;
     Ok(())
