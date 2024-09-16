@@ -10,7 +10,7 @@ use quinn::crypto::rustls::QuicClientConfig;
 use quinn::rustls;
 use rustls::RootCertStore;
 use rustls_pki_types::CertificateDer;
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
@@ -26,7 +26,7 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 /// Main CLI entrypoint
 #[tokio::main]
 pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
-    let server_hostname = "127.0.0.1"; // TEMP; this will come from parsed args
+    let server_hostname = "localhost"; // TEMP; this will come from parsed args
 
     let span = trace_span!("CLIENT");
     let _guard = span.enter();
@@ -65,8 +65,7 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
         server_message.name
     );
 
-    let server_host_port = format!("{server_hostname}:{}", server_message.port);
-    let server_address = tokio::net::lookup_host(server_host_port)
+    let server_address = async_dns::lookup(server_hostname)
         .await
         .map_err(|e| {
             error!("host name lookup failed1");
@@ -77,12 +76,22 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
             error!("host name lookup failed2");
             anyhow::anyhow!("host name lookup failed")
         })?;
-    let endpoint = create_endpoint(&credentials, server_message.cert.into())?;
 
-    trace!("Connecting to {server_address:?}");
+    let server_address_port = match server_address.ip_address {
+        std::net::IpAddr::V4(ip) => SocketAddrV4::new(ip, server_message.port).into(),
+        std::net::IpAddr::V6(ip) => SocketAddrV6::new(ip, server_message.port, 0, 0).into(),
+    };
+
+    let endpoint = create_endpoint(
+        &credentials,
+        server_message.cert.into(),
+        &server_address_port,
+    )?;
+
+    trace!("Connecting to {server_address_port:?}");
     trace!("Local connection address is {:?}", endpoint.local_addr()?);
 
-    let connection_fut = endpoint.connect(server_address, &server_message.name)?;
+    let connection_fut = endpoint.connect(server_address_port, &server_message.name)?;
     let timeout_fut = tokio::time::sleep(CONNECTION_TIMEOUT);
     tokio::pin!(connection_fut, timeout_fut);
 
@@ -154,6 +163,7 @@ async fn wait_for_banner(server: &mut Child, timeout_s: u16) -> Result<()> {
 pub fn create_endpoint(
     credentials: &Credentials,
     server_cert: CertificateDer<'_>,
+    server_addr: &SocketAddr,
 ) -> Result<quinn::Endpoint> {
     let span = span!(Level::TRACE, "create_endpoint");
     let _guard = span.enter();
@@ -177,8 +187,11 @@ pub fn create_endpoint(
     let config = quinn::ClientConfig::new(qcc);
 
     trace!("create endpoint");
-    let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
-    let mut endpoint = quinn::Endpoint::client(addr.into())?;
+    let addr: SocketAddr = match server_addr {
+        SocketAddr::V4(_) => SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0).into(),
+        SocketAddr::V6(_) => SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0).into(),
+    };
+    let mut endpoint = quinn::Endpoint::client(addr)?;
     endpoint.set_default_client_config(config);
 
     Ok(endpoint)
