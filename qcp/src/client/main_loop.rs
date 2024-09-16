@@ -2,6 +2,9 @@
 // (c) 2024 Ross Younger
 
 use crate::protocol::control::{control_capnp, ServerMessage};
+use crate::protocol::session::session_capnp::Status;
+use crate::protocol::session::{session_capnp, Response};
+use crate::protocol::StreamPair;
 use crate::{cert::Credentials, protocol};
 
 use anyhow::{Context, Result};
@@ -113,11 +116,10 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
     };
 
     if let Some(ref c) = connection {
-        info!("Work in progress...");
-        // TODO: Send some commands
-        let _temp_stream = c.open_bi();
-
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // Hard wire a single GET for now.
+        // TODO this will become spawned ?
+        let mut stream: StreamPair = c.open_bi().await?.into();
+        do_get(&mut stream, "testfile").await?;
     }
 
     info!("shutting down");
@@ -195,4 +197,38 @@ pub fn create_endpoint(
     endpoint.set_default_client_config(config);
 
     Ok(endpoint)
+}
+
+async fn do_get(stream: &mut StreamPair, filename: &str) -> Result<()> {
+    let span = span!(Level::TRACE, "do_get");
+    let _guard = span.enter();
+
+    let mut msg = ::capnp::message::Builder::new_default();
+    {
+        let command_msg = msg.init_root::<session_capnp::command::Builder>();
+        let mut args = command_msg.init_args().init_get();
+        args.set_filename(filename);
+    }
+    trace!("send GET");
+    capnp_futures::serialize::write_message(&mut stream.send, msg).await?;
+
+    // TODO protocol timeout?
+    trace!("await response");
+    let response = Response::read(&mut stream.recv).await?;
+    trace!("GET {response:?}");
+
+    if response.status != Status::Ok {
+        let msg_msg = match response.message {
+            Some(s) => format!("with message {s}"),
+            None => "".to_string(),
+        };
+        anyhow::bail!(format!(
+            "GET {filename} failed: server returned status {status:?} {msg_msg}",
+            status = response.status
+        ));
+    }
+
+    // Error handling: what happens on return?
+
+    todo!();
 }

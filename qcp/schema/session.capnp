@@ -1,28 +1,23 @@
 # QCP session protocol wire format definitions
 @0xb2af08ed873f6840;
 
-enum Cmd {
-    get @0;
-    # Retrieves a file. This may fail if the file does not exist or the user doesn't have read permission.
-    # If status is OK, server immediately follows by sending: FileHeader; file data; FileTrailer.
-    # Then close the stream.
-    # If the client needs to abort the transfer, it closes the stream.
-
-    put @1;
-    # Sends a file. This may fail for permissions or if the containing directory doesn't exist.
-    # If status is OK, client then sends: FileHeader; file data; FileTrailer.
-    # Then close the stream.
-    # If the server needs to abort the transfer, it sends a TransferAbortInformation as a QUIC datagram,
-    # then closes the stream.
-}
-
 # A command from client to server.
 # Server must respond with a Response before anything else can happen on this connection.
 struct Command {
-    id @0 : Cmd;
     args : union {
-        get@1: GetCmdArgs;
-        put@2: PutCmdArgs;
+        # Retrieves a file. This may fail if the file does not exist or the user doesn't have read permission.
+        # If status is OK, server immediately follows by sending: FileHeader; file data; FileTrailer.
+        # Then close the stream.
+        # If the client needs to abort the transfer, it closes the stream.
+        get@0: GetCmdArgs;
+
+        # Sends a file. This may fail for permissions or if the containing directory doesn't exist.
+        # If status is OK, client then sends: FileHeader; file data; FileTrailer.
+        # Then close the stream.
+        # If the server needs to abort the transfer, it sends a TransferAbortInformation as a QUIC datagram,
+        # then closes the stream.
+
+        put@1: PutCmdArgs;
     }
 
     struct GetCmdArgs {
@@ -46,6 +41,7 @@ enum Status {
     directoryDoesNotExist @3;
     ioError @4;
     diskFull @5;
+    notYetImplemented @6;
 }
 
 struct FileHeader {
