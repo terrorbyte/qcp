@@ -9,6 +9,7 @@ use crate::protocol;
 use crate::protocol::control::{control_capnp, ClientMessage};
 
 use capnp::message::ReaderOptions;
+use futures_util::io::AsyncReadExt as _;
 use quinn::crypto::rustls::QuicServerConfig;
 use quinn::rustls::server::WebPkiClientVerifier;
 use quinn::rustls::{self, RootCertStore};
@@ -26,7 +27,7 @@ pub async fn server_main() -> anyhow::Result<()> {
     let span = trace_span!("SERVER");
     let _guard = span.enter();
 
-    let stdin = tokio::io::stdin().compat();
+    let mut stdin = tokio::io::stdin().compat();
     let mut stdout = unbuffered_stdout();
 
     stdout
@@ -34,7 +35,7 @@ pub async fn server_main() -> anyhow::Result<()> {
         .await?;
 
     let credentials = crate::cert::Credentials::generate()?;
-    let client_message = read_client_message(stdin).await.unwrap_or_else(|e| {
+    let client_message = read_client_message(&mut stdin).await.unwrap_or_else(|e| {
         // try to be helpful if there's a human reading
         eprintln!("ERROR: This program expects a binary data packet on stdin.\n{e}");
         std::process::exit(1);
@@ -56,19 +57,48 @@ pub async fn server_main() -> anyhow::Result<()> {
 
     // TODO: Timeout if nobody connects?
 
-    trace!("waiting for connection");
-    if let Some(conn) = endpoint.accept().await {
-        let fut = handle_connection(conn);
-        tokio::spawn(async move {
-            if let Err(e) = fut.await {
-                error!("inward stream failed: {reason}", reason = e.to_string());
+    loop {
+        // Control channel main loop.
+        // Wait for new connections OR for stdin to be closed.
+
+        let mut buf = [0u8; 1];
+        let endpoint_fut = endpoint.accept();
+        tokio::pin!(endpoint_fut);
+        let stdin_fut = stdin.read(&mut buf);
+        tokio::pin!(stdin_fut);
+
+        tokio::select! {
+            s = &mut stdin_fut => {
+                match s {
+                    Ok(0) => {
+                        debug!("stdin was closed");
+                        break;
+                    }
+                    Ok(_) => (), // ignore any data
+                    Err(e) => { // can't happen but treat as if closed
+                        debug!("error reading stdin: {e}");
+                        break;
+                    }
+                };
+            },
+            e = &mut endpoint_fut => {
+                match e {
+                    None => {
+                        debug!("Endpoint future returned None");
+                        break;
+                    },
+                    Some(conn) => {
+                        let conn_fut = handle_connection(conn);
+                        tokio::spawn(async move {
+                            if let Err(e) = conn_fut.await {
+                                error!("inward stream failed: {reason}", reason = e.to_string());
+                            }
+                        });
+                    },
+                };
             }
-        });
+        };
     }
-    // TODO: This sleep is a bit naff, but without it there is a race. Sometimes we get here
-    // before the connection has been handled, so it looks idle.
-    // Perhaps add a Finished command on the control channel ?
-    tokio::time::sleep(PROTOCOL_TIMEOUT).await;
 
     // Graceful closedown. Wait for all connections and streams to finish.
     info!("waiting for completion");
@@ -85,7 +115,7 @@ fn unbuffered_stdout() -> tokio::fs::File {
     tokio::fs::File::from_std(file)
 }
 
-async fn read_client_message(stdin: Compat<Stdin>) -> anyhow::Result<ClientMessage> {
+async fn read_client_message(stdin: &mut Compat<Stdin>) -> anyhow::Result<ClientMessage> {
     debug!("waiting for client message");
     let reader = capnp_futures::serialize::read_message(stdin, ReaderOptions::new()).await?;
     let msg_reader: control_capnp::client_message::Reader = reader.get_root()?;

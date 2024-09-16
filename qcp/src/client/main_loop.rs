@@ -13,6 +13,7 @@ use rustls_pki_types::CertificateDer;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::{self, io::AsyncReadExt, time::timeout, time::Duration};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
@@ -34,13 +35,13 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
 
     wait_for_banner(&mut server, args.timeout).await?;
 
-    let server_input = server.stdin.take().unwrap();
+    let mut server_input = server.stdin.take().unwrap().compat_write();
     {
         let mut msg = ::capnp::message::Builder::new_default();
         let mut client_msg = msg.init_root::<control_capnp::client_message::Builder>();
         client_msg.set_cert(&credentials.certificate);
         trace!("sending client message");
-        capnp_futures::serialize::write_message(server_input.compat_write(), msg).await?;
+        capnp_futures::serialize::write_message(&mut server_input, msg).await?;
     }
 
     let server_output = server.stdout.take().unwrap();
@@ -88,9 +89,10 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
     // TODO: Send some commands
     let _temp_stream = connection.open_bi();
 
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     info!("shutting down");
+    server_input.into_inner().shutdown().await?;
     connection.close(0u8.into(), "".as_bytes());
     endpoint.wait_idle().await;
     server.wait().await?;
