@@ -9,7 +9,7 @@ use crate::{cert::Credentials, protocol};
 
 use anyhow::{Context, Result};
 use capnp::message::ReaderOptions;
-use futures_util::TryFutureExt;
+use futures_util::{FutureExt, TryFutureExt};
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{rustls, Connection};
 use rustls::RootCertStore;
@@ -21,7 +21,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::{self, io::AsyncReadExt, time::timeout, time::Duration};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, error, info, span, trace, trace_span, Level};
+use tracing::{debug, error, info, span, trace, trace_span, warn, Level};
 
 use super::ClientArgs;
 
@@ -116,10 +116,17 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<bool> {
     let success = process_request(&mut connection, args).await;
 
     info!("shutting down");
+    // close child process stdin, which should trigger its exit
     server_input.into_inner().shutdown().await?;
+    // bring down QUIC gracefully
     connection.close(0u8.into(), "".as_bytes());
-    endpoint.wait_idle().await;
-    server.wait().await?;
+    let closedown_fut = endpoint.wait_idle().then(|_| server.wait());
+    let timeout_fut = tokio::time::sleep(CONNECTION_TIMEOUT);
+    tokio::pin!(closedown_fut, timeout_fut);
+    tokio::select! {
+        _ = timeout_fut => warn!("shutdown timed out"),
+        _ = closedown_fut => (),
+    };
     Ok(success)
 }
 
