@@ -4,13 +4,14 @@
 use crate::protocol::control::{control_capnp, ServerMessage};
 use crate::protocol::session::session_capnp::Status;
 use crate::protocol::session::{session_capnp, Response};
-use crate::protocol::StreamPair;
+use crate::protocol::{RawStreamPair, StreamPair};
 use crate::{cert::Credentials, protocol};
 
 use anyhow::{Context, Result};
 use capnp::message::ReaderOptions;
+use futures_util::TryFutureExt;
 use quinn::crypto::rustls::QuicClientConfig;
-use quinn::rustls;
+use quinn::{rustls, Connection};
 use rustls::RootCertStore;
 use rustls_pki_types::CertificateDer;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -20,7 +21,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::{self, io::AsyncReadExt, time::timeout, time::Duration};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, error, info, span, trace, trace_span, warn, Level};
+use tracing::{debug, error, info, span, trace, trace_span, Level};
 
 use super::ClientArgs;
 
@@ -28,7 +29,7 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Main CLI entrypoint
 #[tokio::main]
-pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
+pub async fn client_main(args: &ClientArgs) -> anyhow::Result<bool> {
     let server_hostname = "localhost"; // TEMP; this will come from parsed args
 
     let span = trace_span!("CLIENT");
@@ -98,36 +99,42 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
     let timeout_fut = tokio::time::sleep(CONNECTION_TIMEOUT);
     tokio::pin!(connection_fut, timeout_fut);
 
-    let connection = tokio::select! {
+    let mut connection = tokio::select! {
         _ = timeout_fut => {
-            warn!("UDP connection to QUIC endpoint timed out");
-            endpoint.close(0u32.into(), &[0u8;0]);
-            None
+            anyhow::bail!("UDP connection to QUIC endpoint timed out");
         },
         c = &mut connection_fut => {
             match c {
-                Ok(conn) => Some(conn),
+                Ok(conn) => conn,
                 Err(e) => {
-                    warn!("Error connecting: {e}");
-                    None
+                    anyhow::bail!("Failed to connect: {e}");
                 },
             }
         },
     };
 
-    if let Some(ref c) = connection {
-        // Hard wire a single GET for now.
-        // TODO this will become spawned ?
-        let mut stream: StreamPair = c.open_bi().await?.into();
-        do_get(&mut stream, "testfile").await?;
-    }
+    let success = process_request(&mut connection, args).await;
 
     info!("shutting down");
     server_input.into_inner().shutdown().await?;
-    let _ = connection.map(|c| c.close(0u8.into(), "".as_bytes()));
+    connection.close(0u8.into(), "".as_bytes());
     endpoint.wait_idle().await;
     server.wait().await?;
-    Ok(())
+    Ok(success)
+}
+
+async fn process_request(connection: &mut Connection, _args: &ClientArgs) -> bool {
+    // Hard wire a single GET for now.
+    // TODO this will spawn ? or setup multiple futures and await all ?
+    // Called function is responsible for tracing errors.
+    // We return a simple true/false to show success.
+    connection
+        .open_bi()
+        .map_err(|e| anyhow::anyhow!(e))
+        .and_then(|sp| do_get(sp, "testfile"))
+        .inspect_err(|e| error!("{e}"))
+        .map_ok_or_else(|_| false, |_| true)
+        .await
 }
 
 fn launch_server(debug: bool) -> Result<Child> {
@@ -201,7 +208,9 @@ pub fn create_endpoint(
     Ok(endpoint)
 }
 
-async fn do_get(stream: &mut StreamPair, filename: &str) -> Result<()> {
+async fn do_get(sp: RawStreamPair, filename: &str) -> Result<()> {
+    let mut stream: StreamPair = sp.into();
+
     let span = span!(Level::TRACE, "do_get");
     let _guard = span.enter();
 
@@ -229,8 +238,5 @@ async fn do_get(stream: &mut StreamPair, filename: &str) -> Result<()> {
             status = response.status
         ));
     }
-
-    // Error handling: what happens on return?
-
     todo!();
 }
