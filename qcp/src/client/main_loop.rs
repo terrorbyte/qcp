@@ -36,7 +36,7 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
     let credentials = crate::cert::Credentials::generate()?;
 
     info!("connecting to remote");
-    let mut server = launch_server()?;
+    let mut server = launch_server(args.server_debug)?;
 
     wait_for_banner(&mut server, args.timeout).await?;
 
@@ -130,16 +130,18 @@ pub async fn client_main(args: &ClientArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn launch_server() -> Result<Child> {
-    let server = Command::new("qcpt")
-        .args(["--debug"]) // TEMP; TODO make this configurable
+fn launch_server(debug: bool) -> Result<Child> {
+    let mut server = Command::new("qcpt");
+    if debug {
+        server.args(["--debug"]);
+    }
+    server
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit()) // TODO: pipe this more nicely, output on error?
         .kill_on_drop(true)
         .spawn()
-        .context("Could not launch remote server")?;
-    Ok(server)
+        .context("Could not launch remote server")
 }
 
 async fn wait_for_banner(server: &mut Child, timeout_s: u16) -> Result<()> {

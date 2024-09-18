@@ -31,6 +31,9 @@ pub struct ClientArgs {
     /// Connection timeout (seconds)
     #[arg(short, long, default_value("1"))]
     pub timeout: u16,
+    /// Enables server debug output
+    #[arg(short, long, action)]
+    pub server_debug: bool,
     // TODO!
     // This will become something scp-like.
     // qcp [options...] FILE [FILE...] SERVER:DESTDIR/DESTFILE
