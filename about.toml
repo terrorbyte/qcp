@@ -1,0 +1,27 @@
+# config for cargo about
+# https://embarkstudios.github.io/cargo-about/index.html
+
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "MPL-2.0",
+    "OpenSSL",
+    "AGPL-3.0", # qcp
+]
+
+targets = [
+    "x86_64-unknown-linux-gnu",
+]
+
+workarounds = [
+    "ring",
+]
+
+[humanize-rs.clarify]
+license = "MIT"
+[[humanize-rs.clarify.files]]
+path = 'LICENSE'
+checksum = 'daf369a143b29cf36f7e7ca0261889745410af461c5f9a7d240dbbd2952d561a'

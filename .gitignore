@@ -1,6 +1,8 @@
 *~
 *.swp
 .temp
+licenses.html
+sbom.spdx.json
 
 # Added by cargo
 
