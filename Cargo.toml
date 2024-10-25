@@ -7,6 +7,10 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Ross Younger <crazyscot@gmail.com>"]
 license = "AGPL-3.0-or-later"
+repository = "https://github.com/crazyscot/qcp/"
+homepage = "https://github.com/crazyscot/qcp/"
+keywords = [ "network" ]
+categories = [ "command-line-utilities" ]
 
 [dependencies]
 anstyle = "1.0.8"
