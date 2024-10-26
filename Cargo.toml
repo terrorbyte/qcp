@@ -9,7 +9,7 @@ authors = ["Ross Younger <crazyscot@gmail.com>"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/crazyscot/qcp/"
 homepage = "https://github.com/crazyscot/qcp/"
-keywords = [ "network" ]
+keywords = [ "networking", "file-transfer", "quic" ]
 categories = [ "command-line-utilities" ]
 
 [dependencies]

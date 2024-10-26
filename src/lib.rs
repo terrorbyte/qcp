@@ -1,7 +1,7 @@
 // (c) 2024 Ross Younger
 
 #![allow(clippy::doc_markdown)]
-//! The Quic Copier is an experimental high-performance remote file copy utility,
+//! The QUIC Copier (`qcp`) is an experimental high-performance remote file copy utility,
 //! intended for long-distance internet connections.
 //!
 //! ## Overview
@@ -33,11 +33,17 @@
 //! * An improvement for interactive shells (Use [mosh].)
 //! * Delta-based copying (Use [rsync].)
 //!
-//! ## How it works 📖
+//! ## 📖 How it works
 //!
-//! See [protocol].
+//! The brief version:
+//! 1. We ssh to the remote machine and run `qcp --server` there
+//! 1. Both sides generate a TLS key and exchange self-signed certs over the ssh pipe between them
+//! 1. We use those certs to set up a QUIC session between the two
+//! 1. We transfer files over QUIC
 //!
-//! ## Getting the best out of qcp
+//! The [protocol] documentation contains more detail and a discussion of its security properties.
+//!
+//! ## 📈 Getting the best out of qcp
 //!
 //! See [performance](doc::performance) and [troubleshooting](doc::troubleshooting).
 //!
