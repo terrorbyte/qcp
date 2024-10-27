@@ -50,7 +50,13 @@ cargo build --release --locked
 
 The basic syntax is the same as scp or rcp.
 
-You can run the program like this:
+```
+qcp [OPTIONS] <SOURCE> <DESTINATION>
+```
+
+The program has a comprehensive help message, accessed via `qcp -h` (brief) or `qcp --help` (long form).
+
+For example:
 
 ```bash
 $ qcp my-server:/tmp/testfile /tmp/
@@ -58,19 +64,24 @@ $ qcp my-server:/tmp/testfile /tmp/
 testfile ████████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░ 1s @ 6.71 MB/s [60%/10.49 MB]
 ```
 
-The program uses ssh to connect to the target machine and run `qcp --server`. ssh will check the remote host key and prompt you for a password or passphrase in the usual way.
+**The program uses the ssh binary on your system to connect to the target machine**.
+ssh will check the remote host key and prompt you for a password or passphrase in the usual way.
 
-The default options are for a 100Mbit connection, with 300ms round-trip time to the target server.
+#### Tuning
 
-You may care to set the options for your internet connection. For example, if you have 300Mbit/s (37.5MB/s) download and 100Mbit/s (12.5MB/s) upload:
+By default qcp is tuned for a 100Mbit connection, with 300ms round-trip time to the target server.
+
+Various network tuning options are available.
+
+For example, if you have 300Mbit/s (37.5MB/s) download and 100Mbit/s (12.5MB/s) upload, you might use these options:
 
 ```bash
-qcp my-server:/tmp/testfile /tmp/ --tx 12M --rx 37M
+qcp my-server:/tmp/testfile /tmp/ --rx 37M --tx 12M
 ```
 
-Getting good performance can be a tricky subject. See the [performance] documentation.
+Performance tuning can be a tricky subject. See the [performance] documentation.
 
-## 📖 How it works
+## 📖 How qcp works
 
 The brief version:
 
