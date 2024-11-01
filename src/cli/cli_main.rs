@@ -11,7 +11,6 @@ use crate::{
     server::server_main,
     util::setup_tracing,
 };
-use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use tracing::error_span;
 
@@ -23,7 +22,7 @@ use tracing::error_span;
 #[tokio::main(flavor = "current_thread")]
 #[allow(clippy::missing_panics_doc)]
 pub async fn cli() -> anyhow::Result<ExitCode> {
-    let args = CliArgs::parse();
+    let args = CliArgs::custom_parse();
     if args.help_buffers {
         os::print_udp_buffer_size_help_message(
             args.bandwidth.recv_buffer(),

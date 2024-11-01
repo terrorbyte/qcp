@@ -1,8 +1,7 @@
 // QCP top-level command-line arguments
 // (c) 2024 Ross Younger
 
-use crate::build_info;
-use clap::Parser;
+use clap::{Args as _, FromArgMatches as _, Parser};
 
 /// Options that switch us into another mode i.e. which don't require source/destination arguments
 pub(crate) const MODE_OPTIONS: &[&str] = &["server", "help_buffers"];
@@ -10,8 +9,7 @@ pub(crate) const MODE_OPTIONS: &[&str] = &["server", "help_buffers"];
 #[derive(Debug, Parser, Clone)]
 #[command(
     author,
-    version,
-    version(build_info::GIT_VERSION),
+    // we set short/long version strings explicitly, see custom_parse()
     about,
     before_help = "e.g.   qcp some/file my-server:some-directory/",
     infer_long_args(true)
@@ -69,4 +67,13 @@ pub(crate) struct CliArgs {
     // ======================================================================================
     //
     // N.B. ClientOptions has positional arguments!
+}
+
+impl CliArgs {
+    /// Sets up and executes ou
+    pub(crate) fn custom_parse() -> Self {
+        let cli = clap::Command::new(clap::crate_name!());
+        let cli = CliArgs::augment_args(cli).version(crate::version::short());
+        CliArgs::from_arg_matches(&cli.get_matches_from(std::env::args_os())).unwrap()
+    }
 }
