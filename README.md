@@ -38,16 +38,12 @@ The binaries are statically linked. Linux builds should work on all recent distr
 
 ### Installation from source
 
-Install it from crates.io using `cargo`:
+Prerequisite: You need to have `capnpc` installed. Your distribution likely packages this, or see https://capnproto.org/.
+
+You can install the package from source using `cargo`:
 
 ```bash
 cargo install --locked qcp
-```
-
-Or clone the repository and build it manually:
-
-```bash
-cargo build --release --locked
 ```
 
 #### If you are new to Rust and don't have the tools installed
