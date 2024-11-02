@@ -2,6 +2,7 @@
 // (c) 2024 Ross Younger
 
 use crate::client::control::Channel;
+use crate::client::progress::spinner_style;
 use crate::protocol::session::Status;
 use crate::protocol::session::{FileHeader, FileTrailer, Response};
 use crate::protocol::{RawStreamPair, StreamPair};
@@ -70,7 +71,7 @@ pub async fn client_main(
     let spinner = if options.quiet {
         ProgressBar::hidden()
     } else {
-        display.add(ProgressBar::new_spinner())
+        display.add(ProgressBar::new_spinner().with_style(spinner_style()?))
     };
     spinner.enable_steady_tick(Duration::from_millis(150));
     spinner.set_message("Establishing data channel");

@@ -9,7 +9,7 @@ high-performance remote file copy utility for long-distance internet connections
 
 ## 📋 Features
 
-- 🔧 Drop-in replacement for `scp` or `rcp`
+- 🔧 Drop-in replacement for `scp`
 - 🛡️ Similar security to `scp`, using existing, well-known mechanisms
 - 🚀 Better throughput on congested networks
 
@@ -70,8 +70,8 @@ For example:
 
 ```bash
 $ qcp my-server:/tmp/testfile /tmp/
-⠂ Transferring data, instant rate: 2.1MB/s
-testfile ████████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░ 1s @ 6.71 MB/s [60%/10.49 MB]
+⠂ Transferring data                                                           2.1MB/s (last 1s)
+testfile ████████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░ 1s @ 6.71 MB/s [10.49 MB]
 ```
 
 **The program uses the ssh binary on your system to connect to the target machine**.

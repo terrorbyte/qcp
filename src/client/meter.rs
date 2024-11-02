@@ -118,11 +118,8 @@ impl InstaMeterInner {
         let elapsed = elapsed.as_secs_f64();
         let rate = progress / elapsed;
         self.previous_position = current;
-        let msg = format!(
-            "Transferring data, instant rate: {}",
-            rate.human_throughput_bytes()
-        );
-        self.destination.set_message(msg.clone());
+        let msg = format!("{} (last 1s)", rate.human_throughput_bytes());
+        self.destination.set_prefix(msg.clone());
         self.destination
             .enable_steady_tick(self.tick_calc.tick_time(progress));
         msg

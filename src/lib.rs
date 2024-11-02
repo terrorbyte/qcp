@@ -5,7 +5,7 @@
 //! intended for long-distance internet connections.
 //!
 //! ## Overview
-//! - 🔧 Drop-in replacement for `scp` or `rcp`
+//! - 🔧 Drop-in replacement for `scp`
 //! - 🛡️ Similar security to `scp`, using well-known and trustworthy mechanisms
 //!   - User authentication uses `ssh` to establish a control channel and exchange TLS certificates. No PKI is necessary.
 //!   - Data in transit is protected by TLS, with strict certificate checks in both directions

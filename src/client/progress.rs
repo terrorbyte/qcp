@@ -5,9 +5,10 @@
 pub const MAX_UPDATE_FPS: u8 = 20;
 
 use console::Term;
+use indicatif::ProgressStyle;
 
 const PROGRESS_STYLE_COMPACT: &str =
-    "{msg:.dim} {wide_bar:.cyan} {eta} @ {decimal_bytes_per_sec} [{percent}%/{decimal_total_bytes:.dim}]";
+    "{msg:.dim} {wide_bar:.cyan} {eta} @ {decimal_bytes_per_sec} [{decimal_total_bytes:.dim}]";
 
 // 11111111111111111111111111111111111111111111111111111111111111111111111111111111
 // filename [==========================            ] 2m30s @ 123.4MB/s [70%/1.24GB]
@@ -26,7 +27,7 @@ const DATA_AND_PROGRESS: usize = 55;
 // 11111111111111111111111111111111111111111111111111111111111111111111111111111111
 
 const PROGRESS_STYLE_OVERLONG: &str =
-    "{wide_msg:.dim} [{percent}%/{decimal_total_bytes:.dim}]\n{wide_bar:.cyan} {eta} @ {decimal_bytes_per_sec}";
+    "{wide_msg:.dim} [{decimal_total_bytes:.dim}]\n{wide_bar:.cyan} {eta} @ {decimal_bytes_per_sec}";
 
 fn use_long_style(terminal: &Term, msg_size: usize) -> bool {
     let term_width = terminal.size().1 as usize; // this returns a reasonable default if it can't detect
@@ -39,4 +40,10 @@ pub(crate) fn progress_style_for(terminal: &Term, msg_size: usize) -> &str {
     } else {
         PROGRESS_STYLE_COMPACT
     }
+}
+
+pub(crate) const SPINNER_TEMPLATE: &str = "{spinner} {wide_msg} {prefix}";
+
+pub(crate) fn spinner_style() -> anyhow::Result<ProgressStyle> {
+    Ok(ProgressStyle::with_template(SPINNER_TEMPLATE)?)
 }
