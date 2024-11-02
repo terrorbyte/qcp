@@ -109,7 +109,9 @@
 //! [LetsEncrypt]: <https://letsencrypt.org/>
 
 pub mod control;
+pub mod control_capnp;
 pub mod session;
+pub mod session_capnp;
 
 /// Helper type definition (syntactic sugar)
 pub(crate) type RawStreamPair = (quinn::SendStream, quinn::RecvStream);

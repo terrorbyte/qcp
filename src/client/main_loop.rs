@@ -2,7 +2,7 @@
 // (c) 2024 Ross Younger
 
 use crate::client::control::Channel;
-use crate::protocol::session::session_capnp::Status;
+use crate::protocol::session::Status;
 use crate::protocol::session::{FileHeader, FileTrailer, Response};
 use crate::protocol::{RawStreamPair, StreamPair};
 use crate::transport::{BandwidthParams, QuicParams, ThroughputMode};

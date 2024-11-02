@@ -1,7 +1,7 @@
 //! File I/O helpers
 // (c) 2024 Ross Younger
 
-use crate::protocol::session::session_capnp::Status;
+use crate::protocol::session::Status;
 use futures_util::TryFutureExt as _;
 use std::{fs::Metadata, io::ErrorKind, path::Path, path::PathBuf, str::FromStr as _};
 

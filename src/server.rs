@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::protocol::control::{ClientMessage, ClosedownReport, ServerMessage};
-use crate::protocol::session::{session_capnp::Status, Command, FileHeader, FileTrailer, Response};
+use crate::protocol::session::{Command, FileHeader, FileTrailer, Response, Status};
 use crate::protocol::{self, StreamPair};
 use crate::transport::BandwidthParams;
 use crate::util::socket::bind_range_for_family;
