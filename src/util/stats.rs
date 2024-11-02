@@ -130,7 +130,13 @@ pub fn process_statistics(
             );
         }
     }
-    if stats.path.rtt.as_millis() > bandwidth.rtt.into() {
+
+    // Warn when RTT is 10% worse than the configuration.
+    // No, seriously, nobody is going to have an RTT exceeding 2^64 ms. Even 2^32 (~49 days) is beyond unlikely.
+    // This calculation overflows at RTT (2^32 / 100) ms, or about 11.9 hours.
+    // Therefore it will likely go wrong in interstellar use, but that's not in scope right now.
+    #[allow(clippy::cast_possible_truncation)]
+    if (stats.path.rtt.as_millis() as u32) > u32::from(bandwidth.rtt) * 110 / 100 {
         warn!(
             "Measured path RTT {rtt_measured:?} was greater than configuration {rtt_arg}; for better performance, next time try --rtt {rtt_param}",
             rtt_measured = stats.path.rtt,
