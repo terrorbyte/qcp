@@ -16,6 +16,9 @@ rustPlatform.buildRustPackage rec {
     hash = "sha256-NlRM8FGYBmvT7KDOYTyUWTeERa96UPebuyicncJ4ANY=";
   };
 
+  GITHUB_REF_TYPE = "tag";
+  GITHUB_REF_NAME = version;
+
   cargoHash = "sha256-KfsNfvCPpm/6oaUa+H4raIxou+udIuYEWhng2ddi68Y=";
 
   checkFlags = [
