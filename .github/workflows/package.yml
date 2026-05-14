@@ -1,5 +1,7 @@
 name: Cross-platform packaging and testing
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
