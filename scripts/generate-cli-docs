@@ -13,7 +13,7 @@ T=$(dirname "$0")/..
 TOPDIR=$(realpath "$T")
 
 export QCP_MANPAGE_OUT_DIR=$TOPDIR/qcp/misc/generated
-cargo test -p qcp -- cli::manpage::test::manpages cli::manpage::test::markdown
+cargo test -p qcp --locked -- cli::manpage::test::manpages cli::manpage::test::markdown
 echo "Man pages written to ${QCP_MANPAGE_OUT_DIR}"
 echo "Markdown written to ${QCP_MANPAGE_OUT_DIR}/qcp.md"
 
