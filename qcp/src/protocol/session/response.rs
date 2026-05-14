@@ -111,10 +111,7 @@ impl ListData {
             // Add 7 bytes to allow for the encoded size of the array length to grow to 2^63, which is obviously more than we will ever need
             let mut current_size = working.encoded_size()? + 7;
 
-            loop {
-                let Some(front) = input.pop_front() else {
-                    break;
-                };
+            while let Some(front) = input.pop_front() {
                 let entry_size = front.encoded_size()?;
                 if current_size + entry_size > max_size {
                     // Oops! It's too big. Put it back and finish this output packet.

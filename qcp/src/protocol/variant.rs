@@ -558,8 +558,8 @@ mod test {
         ]);
         assert!(v.is_list());
         let r = v.as_list_mut().unwrap();
-        assert!(r.len() == 3);
-        assert!(r[0].as_bool_ref() == Some(&true));
+        assert_eq!(r.len(), 3);
+        assert_eq!(r[0].as_bool_ref(), Some(&true));
     }
 
     #[test]
@@ -570,7 +570,7 @@ mod test {
         let mut v = Variant::from(map);
 
         let r = v.as_map_mut().unwrap();
-        assert!(r.len() == 2);
+        assert_eq!(r.len(), 2);
         assert_eq!(
             r.get_mut("foo").and_then(|v| v.as_string_mut()),
             Some(&mut "bar".to_string())
@@ -623,8 +623,8 @@ mod test {
         ]);
 
         let r = var.as_slice_variant().unwrap();
-        assert!(r.len() == 3);
-        assert!(r[0].as_bool_ref() == Some(&true));
+        assert_eq!(r.len(), 3);
+        assert_eq!(r[0].as_bool_ref(), Some(&true));
 
         let r = var.as_slice_variant_mut().unwrap();
         r[1] = Variant::from(false);

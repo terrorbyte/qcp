@@ -250,6 +250,6 @@ mod test {
     fn empty_fileset() {
         let f = SshConfigFiles::new::<&str>(&[]);
         let files = f.get_files();
-        assert!(files.len() == 2);
+        assert_eq!(files.len(), 2);
     }
 }

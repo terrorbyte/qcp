@@ -215,7 +215,7 @@ mod test {
 
         let pv = Platform::user_config_paths();
         eprintln!("{pv:?}");
-        assert!(pv.len() == 2);
+        assert_eq!(pv.len(), 2);
         assert!(pv[0].to_string_lossy().contains(HOME_COMMON));
         assert!(pv[0].to_string_lossy().contains("/qcp/qcp.conf"));
         assert!(pv[1].to_string_lossy().contains(HOME_COMMON));
