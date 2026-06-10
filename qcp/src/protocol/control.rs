@@ -58,7 +58,7 @@ pub const BANNER: &str = "qcp-server-2\n";
 pub const OLD_BANNER: &str = "qcp-server-1\n";
 
 /// The protocol compatibility version implemented by this crate
-pub(crate) const OUR_COMPATIBILITY_NUMERIC: u16 = 4;
+pub(crate) const OUR_COMPATIBILITY_NUMERIC: u16 = 5;
 /// The protocol compatibility version implemented by this crate
 pub const OUR_COMPATIBILITY_LEVEL: Compatibility = Compatibility::Level(OUR_COMPATIBILITY_NUMERIC);
 
@@ -107,6 +107,9 @@ fn display_opt<T: std::fmt::Display>(label: &str, value: Option<&T>) -> String {
 /// The following compatibility levels are defined:
 /// * 1: Introduced in qcp 0.3.
 /// * 2: Introduced in qcp 0.5.
+/// * 3: Introduced in qcp 0.6.
+/// * 4: Introduced in qcp 0.8.
+/// * 5: Introduced in qcp 0.9.
 ///
 /// See [`crate::protocol::compat::Feature`] for a mapping from compatibility levels to specific features.
 ///
