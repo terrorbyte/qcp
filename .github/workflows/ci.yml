@@ -61,7 +61,7 @@ jobs:
         if: ${{ !cancelled() }}
       - run: typos
         if: ${{ !cancelled() }}
-      - run: dprint check --list-different
+      - run: dprint check --list-different --verbose
         # to fix: dprint fmt
         if: ${{ !cancelled() }}
       - run: dprint fmt --diff
