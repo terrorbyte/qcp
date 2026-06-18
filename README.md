@@ -14,6 +14,10 @@ high-performance remote file copy utility for long-distance internet connections
 
 ### News
 
+- **0.9**
+  - Configurable parallel transfer degree (`-j`)
+  - Faster recursive remote directory creation for deep trees
+  - `--skip-existing` option
 - **0.8** Added support for multi-source transfers and directory recursion
 - **0.6** Improved TLS performance in some use cases (auto-selected cipher suite, RawPublicKey authentication)
 - **0.5**
