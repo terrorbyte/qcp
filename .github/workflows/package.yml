@@ -103,7 +103,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/dev' }}
         if: ${{ matrix.cache }}
 
-      - run: cargo test --locked
+      - run: cargo test --locked --no-fail-fast
         if: inputs.test
 
       - run: cargo cyclonedx --target ${{ matrix.target }}

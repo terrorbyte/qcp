@@ -33,7 +33,7 @@ esac
 
 mkdir -p $COVERAGE_DIR
 cargo ${NIGHTLY} llvm-cov clean --workspace
-cargo ${NIGHTLY} llvm-cov --all-features --workspace --locked --exclude xtask@0.0.0 --no-report nextest --show-instantiations
+cargo ${NIGHTLY} llvm-cov --all-features --workspace --locked --exclude xtask@0.0.0 --no-report nextest --show-instantiations --no-fail-fast
 
 if [ -n "${NIGHTLY}" ]; then
     cargo ${NIGHTLY} llvm-cov --all-features --workspace --locked --exclude xtask@0.0.0 --no-report --doc
