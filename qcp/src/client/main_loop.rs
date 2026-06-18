@@ -346,9 +346,27 @@ impl Client {
             .context("assembling final client configuration from server message")?;
 
         // Are any warnings necessary?
-        if prep_result.preserve() && !qcp_conn.control.selected_compat.supports(Feature::PRESERVE) {
-            warn!("--preserve requested, but remote does not support this option");
+        macro_rules! config_check {
+            ($check:expr, $feat:ident, $what:literal) => {
+                if $check && !qcp_conn.control.selected_compat.supports(Feature::$feat) {
+                    warn!(
+                        "{what} requested, but remote does not support this option",
+                        what = $what
+                    );
+                }
+            };
         }
+        config_check!(prep_result.preserve(), PRESERVE, "--preserve");
+        config_check!(
+            self.args.config.parallel.unwrap_or(1) > 1,
+            PARALLEL_DEGREE,
+            "--parallel"
+        );
+        config_check!(
+            self.args.client_params.skip_existing,
+            SKIP_IF_SAME_SIZE,
+            "--skip-existing"
+        );
         Ok((config, qcp_conn))
     }
 
