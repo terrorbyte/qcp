@@ -47,7 +47,7 @@ fn setup_fs(tray: &mut LitterTray) {
     let _ = tray.make_dir("s/src1").unwrap();
     let _ = tray.make_dir("s/src2").unwrap();
     let _ = tray.make_dir("s/src3").unwrap();
-    #[allow(dead_code, reason = "Used on Unix, not on Windows")]
+    #[allow(unused_variables, reason = "Used on Unix, not on Windows")]
     let d_perms = tray.make_dir("s/src1/subdir").unwrap();
 
     let _ = tray
