@@ -33,10 +33,12 @@ use std::{
     net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6},
     path::MAIN_SEPARATOR,
     pin::Pin,
+    sync::Arc,
 };
 use tokio::{
     self,
     process::{ChildStdin, ChildStdout},
+    sync::Mutex,
     time::{Duration, timeout},
 };
 use tracing::{Instrument as _, debug, error, info, trace, trace_span, warn};
@@ -114,7 +116,6 @@ trait BiStreamOpener {
     async fn open_bi_stream(&self) -> Result<SendReceivePair<Self::Send, Self::Recv>>;
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))] // thin adapter around quinn
 impl BiStreamOpener for QuinnConnection {
     type Send = quinn::SendStream;
     type Recv = quinn::RecvStream;
@@ -216,6 +217,8 @@ impl Client {
         let connection = self
             .establish_data_channel(&prep_result, &config, &mut qcp_conn)
             .await?;
+        // Wrap it up so we can share it safely between tasks
+        let shared_connection = Arc::new(Mutex::new(connection));
 
         // Show time! ---------------------
 
@@ -229,7 +232,7 @@ impl Client {
         let (overall_success, aggregate_stats) = self
             .process_job_requests(
                 &prep_result.job_specs,
-                || connection.open_bi_stream(),
+                &shared_connection,
                 |stream_pair, job, filename_width, pass| {
                     self.run_request(stream_pair, job, filename_width, pass)
                 },
@@ -237,6 +240,10 @@ impl Client {
             .await?;
 
         // Closedown ----------------------
+        let connection = Arc::try_unwrap(shared_connection)
+            .expect("shared connection still has multiple owners")
+            .into_inner();
+
         let remote_stats = self.closedown(qcp_conn).await?;
 
         // Post-transfer chatter -----------
@@ -624,22 +631,19 @@ impl Client {
         Ok(RequestResult::new(CommandStats::default(), None))
     }
 
-    async fn process_job_requests<S, R, OpenStream, JobRunner>(
+    async fn process_job_requests<O: BiStreamOpener, JobRunner>(
         &self,
         jobs_in: &[CopyJobSpec],
-        mut open_stream: OpenStream,
+        connection: &Arc<Mutex<O>>,
         run_job: JobRunner,
     ) -> anyhow::Result<(bool, CommandStats)>
     where
-        OpenStream: AsyncFnMut() -> anyhow::Result<SendReceivePair<S, R>>,
         JobRunner: AsyncFn(
-            SendReceivePair<S, R>,
+            SendReceivePair<O::Send, O::Recv>,
             CopyJobSpec,
             usize,
             TransferPhase,
         ) -> Result<RequestResult>,
-        S: SendingStream + 'static,
-        R: ReceivingStream + 'static,
     {
         let destination_is_remote = jobs_in
             .first()
@@ -647,10 +651,10 @@ impl Client {
         let recurse: bool = self.args.client_params.recurse;
 
         if !destination_is_remote && recurse {
-            self.process_recursive_get(jobs_in, async move || open_stream().await, run_job)
+            self.process_recursive_get(jobs_in, connection, run_job)
                 .await
         } else {
-            self.process_file_transfers(jobs_in, async move || open_stream().await, run_job)
+            self.process_file_transfers(jobs_in, connection, run_job)
                 .await
         }
     }
@@ -676,22 +680,19 @@ impl Client {
     }
 
     /// This function should generally log errors and return Ok(status, stats). Err(...) is reserved for fatal errors.
-    async fn process_file_transfers<S, R, OpenStream, JobRunner>(
+    async fn process_file_transfers<O: BiStreamOpener, JobRunner>(
         &self,
         jobs: &[CopyJobSpec],
-        mut open_stream: OpenStream,
+        connection: &Arc<Mutex<O>>,
         run_job: JobRunner,
     ) -> anyhow::Result<(bool, CommandStats)>
     where
-        OpenStream: AsyncFnMut() -> anyhow::Result<SendReceivePair<S, R>>,
         JobRunner: AsyncFn(
-            SendReceivePair<S, R>,
+            SendReceivePair<O::Send, O::Recv>,
             CopyJobSpec,
             usize,
             TransferPhase,
         ) -> Result<RequestResult>,
-        S: SendingStream + 'static,
-        R: ReceivingStream + 'static,
     {
         let mut aggregate_stats = CommandStats::default();
         let mut overall_success = true;
@@ -730,7 +731,7 @@ impl Client {
                             filename_width,
                             TransferPhase::Transfer,
                             &mut in_flight,
-                            &mut open_stream,
+                            connection,
                             &run_job,
                         )
                         .await?;
@@ -765,7 +766,7 @@ impl Client {
                 filename_width,
                 TransferPhase::Transfer,
                 &mut in_flight,
-                &mut open_stream,
+                connection,
                 &run_job,
             )
             .await?;
@@ -777,7 +778,7 @@ impl Client {
             self,
             jobs,
             n_jobs,
-            &mut open_stream,
+            connection,
             &run_job,
             &mut overall_success,
         )
@@ -787,22 +788,19 @@ impl Client {
     }
 
     /// This function should generally log errors and return Ok(status, stats). Err(...) is reserved for fatal errors.
-    async fn process_recursive_get<S, R, OpenStream, JobRunner>(
+    async fn process_recursive_get<O: BiStreamOpener, JobRunner>(
         &self,
         jobs_in: &[CopyJobSpec],
-        mut open_stream: OpenStream,
+        connection: &Arc<Mutex<O>>,
         run_job: JobRunner,
     ) -> anyhow::Result<(bool, CommandStats)>
     where
-        OpenStream: AsyncFnMut() -> anyhow::Result<SendReceivePair<S, R>>,
         JobRunner: AsyncFn(
-            SendReceivePair<S, R>,
+            SendReceivePair<O::Send, O::Recv>,
             CopyJobSpec,
             usize,
             TransferPhase,
         ) -> Result<RequestResult>,
-        S: SendingStream + 'static,
-        R: ReceivingStream + 'static,
     {
         self.ensure_recursive_get_supported()?;
         let single_source_mkdir_mode = determine_single_source_mkdir_mode(jobs_in).await?;
@@ -810,12 +808,12 @@ impl Client {
             .collect_recursive_jobs(
                 jobs_in,
                 single_source_mkdir_mode.is_none(),
-                &mut open_stream,
+                connection,
                 &run_job,
             )
             .await?;
         apply_single_source_mkdir_mode(single_source_mkdir_mode, &new_jobs).await?;
-        self.process_file_transfers(&new_jobs, async move || open_stream().await, run_job)
+        self.process_file_transfers(&new_jobs, connection, run_job)
             .await
     }
 
@@ -839,29 +837,26 @@ impl Client {
         Ok(())
     }
 
-    async fn collect_recursive_jobs<S, R, OpenStream, JobRunner>(
+    async fn collect_recursive_jobs<O: BiStreamOpener, JobRunner>(
         &self,
         jobs_in: &[CopyJobSpec],
         include_remote_dir_name: bool,
-        open_stream: &mut OpenStream,
+        connection: &Arc<Mutex<O>>,
         run_job: &JobRunner,
     ) -> anyhow::Result<Vec<CopyJobSpec>>
     where
-        OpenStream: AsyncFnMut() -> anyhow::Result<SendReceivePair<S, R>>,
         JobRunner: AsyncFn(
-            SendReceivePair<S, R>,
+            SendReceivePair<O::Send, O::Recv>,
             CopyJobSpec,
             usize,
             TransferPhase,
         ) -> Result<RequestResult>,
-        S: SendingStream + 'static,
-        R: ReceivingStream + 'static,
     {
         self.spinner
             .set_message("Asking remote for list of files to transfer");
         let mut new_jobs = Vec::new();
         for job in jobs_in {
-            let stream_pair = open_stream().await?;
+            let stream_pair = connection.lock().await.open_bi_stream().await?;
             let result = run_job(stream_pair, job.clone(), 0, TransferPhase::Pre)
                 .await
                 .inspect_err(|_| warn!("No files were transferred"))?;
@@ -898,22 +893,23 @@ async fn drain_in_flight(
     true
 }
 
-async fn enqueue_transfer_job<'a, S, R, OpenStream, JobRunner>(
-    job: &CopyJobSpec,
+async fn enqueue_transfer_job<'a, O: BiStreamOpener, JobRunner>(
+    job: &'a CopyJobSpec,
     filename_width: usize,
     phase: TransferPhase,
     in_flight: &mut InFlightTransfers<'a>,
-    open_stream: &mut OpenStream,
+    connection: &'a Arc<Mutex<O>>,
     run_job: &'a JobRunner,
 ) -> anyhow::Result<()>
 where
-    OpenStream: AsyncFnMut() -> anyhow::Result<SendReceivePair<S, R>>,
-    JobRunner:
-        AsyncFn(SendReceivePair<S, R>, CopyJobSpec, usize, TransferPhase) -> Result<RequestResult>,
-    S: SendingStream + 'static,
-    R: ReceivingStream + 'static,
+    JobRunner: AsyncFn(
+        SendReceivePair<O::Send, O::Recv>,
+        CopyJobSpec,
+        usize,
+        TransferPhase,
+    ) -> Result<RequestResult>,
 {
-    let stream_pair = open_stream().await?;
+    let stream_pair = connection.clone().lock().await.open_bi_stream().await?;
     let job_clone = job.clone();
     let transfer_fut = run_job(stream_pair, job_clone.clone(), filename_width, phase);
     in_flight.push(Box::pin(async move { (job_clone, transfer_fut.await) }));
@@ -949,20 +945,21 @@ async fn drain_remaining_in_flight(
     }
 }
 
-async fn apply_directory_metadata<S, R, OpenStream, JobRunner>(
+async fn apply_directory_metadata<O: BiStreamOpener, JobRunner>(
     client: &Client,
     jobs: &[CopyJobSpec],
     n_jobs: usize,
-    open_stream: &mut OpenStream,
+    connection: &Arc<Mutex<O>>,
     run_job: &JobRunner,
     overall_success: &mut bool,
 ) -> anyhow::Result<()>
 where
-    OpenStream: AsyncFnMut() -> anyhow::Result<SendReceivePair<S, R>>,
-    JobRunner:
-        AsyncFn(SendReceivePair<S, R>, CopyJobSpec, usize, TransferPhase) -> Result<RequestResult>,
-    S: SendingStream + 'static,
-    R: ReceivingStream + 'static,
+    JobRunner: AsyncFn(
+        SendReceivePair<O::Send, O::Recv>,
+        CopyJobSpec,
+        usize,
+        TransferPhase,
+    ) -> Result<RequestResult>,
 {
     if n_jobs <= 1 {
         return Ok(());
@@ -971,7 +968,7 @@ where
     let mut message_set = false;
     for job in jobs.iter().rev() {
         if job.directory && job.preserve {
-            let stream_pair = open_stream().await?;
+            let stream_pair = connection.clone().lock().await.open_bi_stream().await?;
             if !message_set {
                 client
                     .spinner
@@ -1142,6 +1139,7 @@ mod test {
         str::FromStr,
     };
     use tokio::io::AsyncWriteExt;
+    use tokio::sync::Mutex as TokioMutex;
     use tokio::time::{Duration, timeout};
 
     use littertray::LitterTray;
@@ -1152,6 +1150,7 @@ mod test {
     use crate::client::main_loop::Negotiated;
     #[cfg(unix)]
     use crate::control::create_fake;
+    use crate::protocol::common::SendReceivePair;
     use crate::session::factory::TransferPhase;
 
     use crate::session::CommandStats;
@@ -1434,16 +1433,13 @@ mod test {
             encode_get_success_response(DATA1),
             encode_get_success_response(DATA2),
         ]);
+        let shared = conn.into_shared();
 
         let (success, stats) = LitterTray::try_with_async(async |_| {
             let (success, stats) = uut
-                .process_job_requests(
-                    &jobs,
-                    || conn.open_bi_stream(),
-                    |stream_pair, job, filename_width, pass| {
-                        uut.run_request(stream_pair, job, filename_width, pass)
-                    },
-                )
+                .process_job_requests(&jobs, &shared, |stream_pair, job, filename_width, pass| {
+                    uut.run_request(stream_pair, job, filename_width, pass)
+                })
                 .await
                 .unwrap();
 
@@ -1456,6 +1452,7 @@ mod test {
         .unwrap();
 
         assert!(success);
+        let conn = FakeBiConnection::from_shared(shared);
         assert_eq!(conn.open_calls.load(Ordering::SeqCst), 2);
         assert_eq!(stats.payload_bytes, (DATA1.len() + DATA2.len()) as u64);
     }
@@ -1479,16 +1476,13 @@ mod test {
             encode_get_success_response(DATA1),
             encode_get_error_response(),
         ]);
+        let shared = conn.into_shared();
 
         let (success, stats) = LitterTray::try_with_async(async |_| {
             let (success, stats) = uut
-                .process_job_requests(
-                    &jobs,
-                    || conn.open_bi_stream(),
-                    |stream_pair, job, filename_width, pass| {
-                        uut.run_request(stream_pair, job, filename_width, pass)
-                    },
-                )
+                .process_job_requests(&jobs, &shared, |stream_pair, job, filename_width, pass| {
+                    uut.run_request(stream_pair, job, filename_width, pass)
+                })
                 .await
                 .unwrap();
 
@@ -1502,8 +1496,33 @@ mod test {
         .unwrap();
 
         assert!(!success);
+        let conn = FakeBiConnection::from_shared(shared);
         assert_eq!(conn.open_calls.load(Ordering::SeqCst), 2);
         assert_eq!(stats.payload_bytes, DATA1.len() as u64);
+    }
+
+    #[derive(Default, Debug)]
+    // counting wrapper for new_test_plumbing
+    struct TestPlumbingConnector {
+        open_calls: AtomicUsize,
+    }
+    impl BiStreamOpener for TestPlumbingConnector {
+        type Send = tokio::io::WriteHalf<tokio::io::SimplexStream>;
+        type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
+
+        async fn open_bi_stream(&self) -> anyhow::Result<SendReceivePair<Self::Send, Self::Recv>> {
+            let _ = self.open_calls.fetch_add(1, Ordering::SeqCst);
+            let (a, _b) = new_test_plumbing();
+            Ok(a)
+        }
+    }
+    impl TestPlumbingConnector {
+        fn new_shared() -> Arc<TokioMutex<Self>> {
+            Arc::new(TokioMutex::new(Self::default()))
+        }
+        fn open_calls(&self) -> usize {
+            self.open_calls.load(Ordering::SeqCst)
+        }
     }
 
     #[tokio::test]
@@ -1513,7 +1532,6 @@ mod test {
             CopyJobSpec::from_parts("file2", "host:dir", false, false).unwrap(),
         ];
 
-        let open_calls = AtomicUsize::new(0);
         let handle_calls = AtomicUsize::new(0);
         let results = Mutex::new(vec![
             RequestResult::new(
@@ -1534,14 +1552,13 @@ mod test {
             ),
         ]);
 
+        let connector = TestPlumbingConnector::new_shared();
+
         let client = make_uut(|_, _| (), "src", "dest", 1);
         let (success, stats) = client
             .process_job_requests(
                 &jobs,
-                || {
-                    let _ = open_calls.fetch_add(1, Ordering::SeqCst);
-                    async { Ok::<_, anyhow::Error>(new_test_plumbing().0) }
-                },
+                &connector,
                 |stream_pair, _job, _filename_width, _pass| {
                     let _ = handle_calls.fetch_add(1, Ordering::SeqCst);
                     drop(stream_pair);
@@ -1552,8 +1569,7 @@ mod test {
             .unwrap();
 
         assert!(success);
-        assert_eq!(open_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(handle_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(connector.lock().await.open_calls(), 2);
         assert_eq!(stats.payload_bytes, 15);
         assert_eq!(stats.peak_transfer_rate, 200);
     }
@@ -1566,7 +1582,6 @@ mod test {
             CopyJobSpec::from_parts("file3", "host:dir", false, false).unwrap(),
         ];
 
-        let open_calls = AtomicUsize::new(0);
         let handle_calls = AtomicUsize::new(0);
         let results = Mutex::new(vec![
             Ok(RequestResult::new(
@@ -1590,13 +1605,11 @@ mod test {
         ]);
 
         let client = make_uut(|_, _| (), "src", "dest", 1);
+        let connector = TestPlumbingConnector::new_shared();
         let (success, stats) = client
             .process_job_requests(
                 &jobs,
-                || {
-                    let _ = open_calls.fetch_add(1, Ordering::SeqCst);
-                    async { Ok::<_, anyhow::Error>(new_test_plumbing().0) }
-                },
+                &connector,
                 |stream_pair, _job, _filename_width, _pass| {
                     let _ = handle_calls.fetch_add(1, Ordering::SeqCst);
                     drop(stream_pair);
@@ -1607,7 +1620,7 @@ mod test {
             .unwrap();
 
         assert!(!success);
-        assert_eq!(open_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(connector.lock().await.open_calls(), 2);
         assert_eq!(handle_calls.load(Ordering::SeqCst), 2);
         assert_eq!(stats.payload_bytes, 10);
         assert_eq!(stats.peak_transfer_rate, 100);
@@ -1642,6 +1655,7 @@ mod test {
         send_buf
     }
 
+    #[derive(Debug)]
     struct FakeBiConnection {
         responses: Mutex<Vec<Vec<u8>>>,
         open_calls: AtomicUsize,
@@ -1653,6 +1667,14 @@ mod test {
                 responses: Mutex::new(responses),
                 open_calls: AtomicUsize::new(0),
             }
+        }
+        fn into_shared(self) -> Arc<TokioMutex<Self>> {
+            Arc::new(TokioMutex::new(self))
+        }
+        fn from_shared(shared: Arc<TokioMutex<Self>>) -> Self {
+            Arc::try_unwrap(shared)
+                .expect("no other references to connection")
+                .into_inner()
         }
     }
 
@@ -1703,7 +1725,6 @@ mod test {
             CopyJobSpec::from_parts("dir2", "host:dir2", true, true).unwrap(),
         ];
 
-        let open_calls = AtomicUsize::new(0);
         let handle_calls = AtomicUsize::new(0);
         let results = Mutex::new(vec![
             // Each directory is handled twice, so we expect to see five results.
@@ -1725,13 +1746,11 @@ mod test {
         ]);
 
         let client = make_uut(|_, _| (), "src", "dest", 1);
+        let connector = TestPlumbingConnector::new_shared();
         let (success, stats) = client
             .process_job_requests(
                 &jobs,
-                || {
-                    let _ = open_calls.fetch_add(1, Ordering::SeqCst);
-                    async { Ok::<_, anyhow::Error>(new_test_plumbing().0) }
-                },
+                &connector,
                 |stream_pair, _job, _filename_width, _pass| {
                     let _ = handle_calls.fetch_add(1, Ordering::SeqCst);
                     drop(stream_pair);
@@ -1742,7 +1761,7 @@ mod test {
             .unwrap();
 
         assert!(success);
-        assert_eq!(open_calls.load(Ordering::SeqCst), 5);
+        assert_eq!(connector.lock().await.open_calls(), 5);
         assert_eq!(handle_calls.load(Ordering::SeqCst), 5);
         assert_eq!(stats.payload_bytes, 10);
         assert_eq!(stats.peak_transfer_rate, 100);
@@ -1803,16 +1822,57 @@ mod test {
         client
     }
 
+    const TRANSFER_FILE_DATA: &[u8] = b"hi";
+    const TRANSFER_N_FILES: u16 = 3;
+
+    #[derive(Debug, Clone)]
+    struct ConcurrentTrackerData {
+        concurrent_open: Arc<TokioMutex<AtomicUsize>>,
+        peak_concurrent: Arc<TokioMutex<AtomicUsize>>,
+        conn_responses: Arc<TokioMutex<Vec<Vec<u8>>>>,
+    }
+    impl Default for ConcurrentTrackerData {
+        fn default() -> Self {
+            Self {
+                concurrent_open: Arc::new(TokioMutex::new(AtomicUsize::new(0))),
+                peak_concurrent: Arc::new(TokioMutex::new(AtomicUsize::new(0))),
+                conn_responses: Arc::new(TokioMutex::new(
+                    (0..TRANSFER_N_FILES)
+                        .map(|_| encode_get_success_response(TRANSFER_FILE_DATA))
+                        .collect(),
+                )),
+            }
+        }
+    }
+    impl BiStreamOpener for ConcurrentTrackerData {
+        type Send = tokio::io::WriteHalf<tokio::io::SimplexStream>;
+        type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
+
+        async fn open_bi_stream(&self) -> anyhow::Result<SendReceivePair<Self::Send, Self::Recv>> {
+            let resp = self.conn_responses.lock().await.remove(0);
+            let (client_side, mut server_side) = new_test_plumbing();
+            std::mem::drop(tokio::spawn(async move {
+                let _ = server_side.send.write_all(&resp).await;
+            }));
+            let _ = self
+                .concurrent_open
+                .lock()
+                .await
+                .fetch_add(1, Ordering::SeqCst);
+            let _ = self.peak_concurrent.lock().await.fetch_max(
+                self.concurrent_open.lock().await.load(Ordering::SeqCst),
+                Ordering::SeqCst,
+            );
+            Ok(client_side)
+        }
+    }
+
     /// Verifies that with `parallel = N`, all N files are eventually transferred.
     #[tokio::test]
     async fn process_file_transfers_runs_n_files_concurrently() {
-        use std::sync::atomic::AtomicUsize;
-        const N: u16 = 3;
-        const FILE_DATA: &[u8] = b"hi";
+        let uut = make_uut_parallel("127.0.0.1:src", "dst", TRANSFER_N_FILES);
 
-        let uut = make_uut_parallel("127.0.0.1:src", "dst", N);
-
-        let jobs: Vec<CopyJobSpec> = (0..N)
+        let jobs: Vec<CopyJobSpec> = (0..TRANSFER_N_FILES)
             .map(|i| {
                 CopyJobSpec::from_parts(
                     &format!("127.0.0.1:file{i}"),
@@ -1824,43 +1884,27 @@ mod test {
             })
             .collect();
 
-        let conn_responses: Vec<Vec<u8>> = (0..N)
-            .map(|_| encode_get_success_response(FILE_DATA))
-            .collect();
-        let conn_responses = Arc::new(Mutex::new(conn_responses));
-
-        // Track the peak number of simultaneously open streams.
-        let concurrent_open = Arc::new(AtomicUsize::new(0));
-        let peak_concurrent = Arc::new(AtomicUsize::new(0));
-
-        let concurrent_open_c = concurrent_open.clone();
-        let peak_concurrent_c = peak_concurrent.clone();
-        let conn_responses_c = conn_responses.clone();
+        let tracker = ConcurrentTrackerData::default();
 
         let (success, stats) = LitterTray::try_with_async(async |_| {
+            let tracker2 = Arc::new(TokioMutex::new(tracker.clone()));
+
             let (success, stats) = uut
                 .process_file_transfers(
                     &jobs,
-                    || {
-                        let resp = conn_responses_c.lock().unwrap().remove(0);
-                        let open_c = concurrent_open_c.clone();
-                        let peak_c = peak_concurrent_c.clone();
-                        async move {
-                            let prev = open_c.fetch_add(1, Ordering::SeqCst);
-                            let _ = peak_c.fetch_max(prev + 1, Ordering::SeqCst);
-                            let (client_side, mut server_side) = new_test_plumbing();
-                            std::mem::drop(tokio::spawn(async move {
-                                let _ = server_side.send.write_all(&resp).await;
-                            }));
-                            Ok::<_, anyhow::Error>(client_side)
-                        }
-                    },
+                    &tracker2.clone(),
                     |stream_pair, job, filename_width, pass| {
-                        let open_c = concurrent_open.clone();
                         let fut = uut.run_request(stream_pair, job, filename_width, pass);
-                        async move {
+                        async {
                             let r = fut.await;
-                            let _ = open_c.fetch_sub(1, Ordering::SeqCst);
+                            let _ = tracker2
+                                .clone()
+                                .lock()
+                                .await
+                                .concurrent_open
+                                .lock()
+                                .await
+                                .fetch_sub(1, Ordering::SeqCst);
                             r
                         }
                     },
@@ -1874,9 +1918,12 @@ mod test {
 
         assert!(success);
         // All N files should have been transferred.
-        assert_eq!(stats.payload_bytes, u64::from(N) * (FILE_DATA.len() as u64));
-        assert_eq!(conn_responses.lock().unwrap().len(), 0);
+        assert_eq!(
+            stats.payload_bytes,
+            u64::from(TRANSFER_N_FILES) * (TRANSFER_FILE_DATA.len() as u64)
+        );
+        assert_eq!(tracker.conn_responses.lock().await.len(), 0);
         // At least one stream was opened.
-        assert!(peak_concurrent_c.load(Ordering::SeqCst) >= 1);
+        assert!(tracker.peak_concurrent.lock().await.load(Ordering::SeqCst) >= 1);
     }
 }

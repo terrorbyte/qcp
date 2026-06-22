@@ -13,9 +13,9 @@
 
 use crate::{
     Configuration,
-    client::main_loop::Client,
+    client::main_loop::{BiStreamOpener, Client},
     config::Configuration_Optional,
-    protocol::{control::Compatibility, test_helpers::new_test_plumbing},
+    protocol::{common::SendReceivePair, control::Compatibility, test_helpers::new_test_plumbing},
     util::time::SystemTimeExt as _,
 };
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget};
@@ -24,8 +24,10 @@ use rstest::*;
 use std::{
     cell::RefCell,
     path::MAIN_SEPARATOR,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
+use tokio::sync::Mutex as TokioMutex;
 use walkdir::WalkDir;
 
 /// A file to set read-only
@@ -123,6 +125,37 @@ fn shared_setup_tracing() -> LocalTracing {
     LocalTracing {}
 }
 
+#[derive(Default, Debug)]
+// wrapper for a vec of bidi streams
+struct TestPlumbingStreamsList {
+    client_streams: RefCell<
+        Vec<
+            SendReceivePair<
+                tokio::io::WriteHalf<tokio::io::SimplexStream>,
+                tokio::io::ReadHalf<tokio::io::SimplexStream>,
+            >,
+        >,
+    >,
+}
+impl BiStreamOpener for TestPlumbingStreamsList {
+    type Send = tokio::io::WriteHalf<tokio::io::SimplexStream>;
+    type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
+
+    async fn open_bi_stream(&self) -> anyhow::Result<SendReceivePair<Self::Send, Self::Recv>> {
+        let stream = self
+            .client_streams
+            .borrow_mut()
+            .pop()
+            .expect("Ran out of streams!");
+        Ok(stream)
+    }
+}
+impl TestPlumbingStreamsList {
+    fn make_shared(self) -> Arc<TokioMutex<Self>> {
+        Arc::new(TokioMutex::new(self))
+    }
+}
+
 async fn run_plumbing(uut: &mut Client) -> anyhow::Result<(bool, crate::session::CommandStats)> {
     let cfg = Configuration_Optional::default();
     let n_streams = 10;
@@ -156,15 +189,11 @@ async fn run_plumbing(uut: &mut Client) -> anyhow::Result<(bool, crate::session:
     }
 
     let prep_result = uut.prep(&cfg, Configuration::system_default()).unwrap();
+    let connector = TestPlumbingStreamsList { client_streams }.make_shared();
 
     uut.process_recursive_get(
         &prep_result.job_specs,
-        async || {
-            Ok(client_streams
-                .borrow_mut()
-                .pop()
-                .expect("Ran out of streams!"))
-        },
+        &connector,
         |stream_pair, job, filename_width, pass| {
             uut.run_request(stream_pair, job, filename_width, pass)
         },
