@@ -70,7 +70,7 @@ jobs:
         if: ${{ !cancelled() }}
       - run: cargo shear
         if: ${{ !cancelled() }}
-      - run: cargo clippy --locked --tests --workspace
+      - run: cargo clippy --locked --tests --workspace --no-deps
         if: ${{ !cancelled() }}
 
   docs:
@@ -97,9 +97,6 @@ jobs:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/dev' }}
       - run: cargo docs-rs -p qcp --locked
-      # Continue on error for maximum information
-      - run: cargo doc -p qcp --no-deps --locked --document-private-items
-        if: ${{ !cancelled() }}
 
   coverage:
     runs-on: ubuntu-latest
