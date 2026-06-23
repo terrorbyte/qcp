@@ -554,6 +554,7 @@ CLI options take precedence over the configuration file, which takes precedence 
     /// because each file's transfer can overlap with others rather than waiting for each to complete serially.
     ///
     /// A value of 1 (the default) gives the same sequential behaviour as previous versions.
+    /// Numbers much larger than the number of CPU cores available are unlikely to improve performance, and you risk running into the kernel open files limit.
     ///
     /// **Note:** With `parallel > 1`, the QUIC receive buffer grows proportionally;
     /// very large values on memory-constrained systems may need `udp-buffer` tuning.

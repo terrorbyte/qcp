@@ -82,7 +82,8 @@
 //!   hard time keeping up with modern networks, though OS write caching will help (assuming you have enough RAM).
 //! * As of v0.8, the new multi-file and recursive transfer modes don't always perform brilliantly with lots of small files.
 //!   (With longer RTTs they do out-perform scp, but not by much.) In some cases it will be more efficient to aggregate smaller files into an archive.
-//!
+//! * The `--parallel` option added in v0.9 improves performance when copying lots of small files.
+//!   Try the number of CPU cores you have available on the client, and try running in quiet mode (`-q`) to see if that helps.
 //!
 //! ### Reporting
 //!
