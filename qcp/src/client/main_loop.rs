@@ -113,14 +113,14 @@ trait BiStreamOpener {
     type Send: SendingStream + 'static;
     type Recv: ReceivingStream + 'static;
 
-    async fn open_bi_stream(&self) -> Result<SendReceivePair<Self::Send, Self::Recv>>;
+    async fn open_bi_stream(&mut self) -> Result<SendReceivePair<Self::Send, Self::Recv>>;
 }
 
 impl BiStreamOpener for QuinnConnection {
     type Send = quinn::SendStream;
     type Recv = quinn::RecvStream;
 
-    async fn open_bi_stream(&self) -> Result<SendReceivePair<Self::Send, Self::Recv>> {
+    async fn open_bi_stream(&mut self) -> Result<SendReceivePair<Self::Send, Self::Recv>> {
         let bi = self.open_bi().await.map_err(|e| anyhow::anyhow!(e))?;
         Ok(SendReceivePair::from(bi))
     }
@@ -733,8 +733,7 @@ impl Client {
                             &mut in_flight,
                             connection,
                             &run_job,
-                        )
-                        .await?;
+                        );
                     } else if !create_local_empty_directory(job).await {
                         overall_success = false;
                         break;
@@ -768,8 +767,7 @@ impl Client {
                 &mut in_flight,
                 connection,
                 &run_job,
-            )
-            .await?;
+            );
         }
 
         drain_remaining_in_flight(&mut in_flight, &mut aggregate_stats, &mut overall_success).await;
@@ -893,15 +891,14 @@ async fn drain_in_flight(
     true
 }
 
-async fn enqueue_transfer_job<'a, O: BiStreamOpener, JobRunner>(
+fn enqueue_transfer_job<'a, O: BiStreamOpener, JobRunner>(
     job: &'a CopyJobSpec,
     filename_width: usize,
     phase: TransferPhase,
     in_flight: &mut InFlightTransfers<'a>,
     connection: &'a Arc<Mutex<O>>,
     run_job: &'a JobRunner,
-) -> anyhow::Result<()>
-where
+) where
     JobRunner: AsyncFn(
         SendReceivePair<O::Send, O::Recv>,
         CopyJobSpec,
@@ -909,11 +906,14 @@ where
         TransferPhase,
     ) -> Result<RequestResult>,
 {
-    let stream_pair = connection.clone().lock().await.open_bi_stream().await?;
-    let job_clone = job.clone();
-    let transfer_fut = run_job(stream_pair, job_clone.clone(), filename_width, phase);
-    in_flight.push(Box::pin(async move { (job_clone, transfer_fut.await) }));
-    Ok(())
+    let transfer_fut = async move {
+        let c = connection.clone();
+        let mut opener = c.lock().await;
+        let stream_pair = opener.open_bi_stream().await?;
+        drop(opener); // release the lock as soon as possible, as run_job might acquire the same mutex
+        run_job(stream_pair, job.clone(), filename_width, phase).await
+    };
+    in_flight.push(Box::pin(async move { (job.clone(), transfer_fut.await) }));
 }
 
 async fn create_local_empty_directory(job: &CopyJobSpec) -> bool {
@@ -1330,7 +1330,7 @@ mod test {
         let connecting = client_endpoint
             .connect(server_addr, &server_creds.hostname)
             .unwrap();
-        let connection = timeout(Duration::from_secs(5), connecting)
+        let mut connection = timeout(Duration::from_secs(5), connecting)
             .await
             .expect("timed out connecting")
             .expect("connection failed");
@@ -1510,10 +1510,12 @@ mod test {
         type Send = tokio::io::WriteHalf<tokio::io::SimplexStream>;
         type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
 
-        async fn open_bi_stream(&self) -> anyhow::Result<SendReceivePair<Self::Send, Self::Recv>> {
+        fn open_bi_stream(
+            &mut self,
+        ) -> impl Future<Output = anyhow::Result<SendReceivePair<Self::Send, Self::Recv>>> {
             let _ = self.open_calls.fetch_add(1, Ordering::SeqCst);
             let (a, _b) = new_test_plumbing();
-            Ok(a)
+            std::future::ready(Ok(a))
         }
     }
     impl TestPlumbingConnector {
@@ -1683,7 +1685,7 @@ mod test {
         type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
 
         fn open_bi_stream(
-            &self,
+            &mut self,
         ) -> impl Future<
             Output = anyhow::Result<
                 crate::protocol::common::SendReceivePair<Self::Send, Self::Recv>,
@@ -1825,22 +1827,20 @@ mod test {
     const TRANSFER_FILE_DATA: &[u8] = b"hi";
     const TRANSFER_N_FILES: u16 = 3;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     struct ConcurrentTrackerData {
-        concurrent_open: Arc<TokioMutex<AtomicUsize>>,
-        peak_concurrent: Arc<TokioMutex<AtomicUsize>>,
-        conn_responses: Arc<TokioMutex<Vec<Vec<u8>>>>,
+        concurrent_open: AtomicUsize,
+        peak_concurrent: AtomicUsize,
+        conn_responses: Vec<Vec<u8>>,
     }
     impl Default for ConcurrentTrackerData {
         fn default() -> Self {
             Self {
-                concurrent_open: Arc::new(TokioMutex::new(AtomicUsize::new(0))),
-                peak_concurrent: Arc::new(TokioMutex::new(AtomicUsize::new(0))),
-                conn_responses: Arc::new(TokioMutex::new(
-                    (0..TRANSFER_N_FILES)
-                        .map(|_| encode_get_success_response(TRANSFER_FILE_DATA))
-                        .collect(),
-                )),
+                concurrent_open: AtomicUsize::new(0),
+                peak_concurrent: AtomicUsize::new(0),
+                conn_responses: (0..TRANSFER_N_FILES)
+                    .map(|_| encode_get_success_response(TRANSFER_FILE_DATA))
+                    .collect(),
             }
         }
     }
@@ -1848,22 +1848,20 @@ mod test {
         type Send = tokio::io::WriteHalf<tokio::io::SimplexStream>;
         type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
 
-        async fn open_bi_stream(&self) -> anyhow::Result<SendReceivePair<Self::Send, Self::Recv>> {
-            let resp = self.conn_responses.lock().await.remove(0);
+        fn open_bi_stream(
+            &mut self,
+        ) -> impl Future<Output = anyhow::Result<SendReceivePair<Self::Send, Self::Recv>>> {
+            let resp = self.conn_responses.remove(0);
             let (client_side, mut server_side) = new_test_plumbing();
             std::mem::drop(tokio::spawn(async move {
                 let _ = server_side.send.write_all(&resp).await;
             }));
-            let _ = self
-                .concurrent_open
-                .lock()
-                .await
-                .fetch_add(1, Ordering::SeqCst);
-            let _ = self.peak_concurrent.lock().await.fetch_max(
-                self.concurrent_open.lock().await.load(Ordering::SeqCst),
+            let _ = self.concurrent_open.fetch_add(1, Ordering::SeqCst);
+            let _ = self.peak_concurrent.fetch_max(
+                self.concurrent_open.load(Ordering::SeqCst),
                 Ordering::SeqCst,
             );
-            Ok(client_side)
+            std::future::ready(Ok(client_side))
         }
     }
 
@@ -1885,28 +1883,29 @@ mod test {
             .collect();
 
         let tracker = ConcurrentTrackerData::default();
+        let wrapper = Arc::new(TokioMutex::new(tracker));
+        let wrapper2 = wrapper.clone();
 
-        let (success, stats) = LitterTray::try_with_async(async |_| {
-            let tracker2 = Arc::new(TokioMutex::new(tracker.clone()));
-
+        let (success, stats) = LitterTray::try_with_async(async move |_| {
             let (success, stats) = uut
                 .process_file_transfers(
                     &jobs,
-                    &tracker2.clone(),
-                    |stream_pair, job, filename_width, pass| {
-                        let fut = uut.run_request(stream_pair, job, filename_width, pass);
-                        async {
-                            let r = fut.await;
-                            let _ = tracker2
-                                .clone()
-                                .lock()
-                                .await
-                                .concurrent_open
-                                .lock()
-                                .await
-                                .fetch_sub(1, Ordering::SeqCst);
-                            r
-                        }
+                    &wrapper2.clone(),
+                    async |stream_pair, job: CopyJobSpec, filename_width, pass| {
+                        let wrapper3 = wrapper2.clone();
+                        let filename = job.display_filename().to_str().unwrap().to_string();
+                        eprintln!("Starting transfer for {filename}");
+                        let r = uut
+                            .run_request(stream_pair, job, filename_width, pass)
+                            .await;
+                        eprintln!("request for {filename} completed");
+                        let _ = wrapper3
+                            .lock()
+                            .await
+                            .concurrent_open
+                            .fetch_sub(1, Ordering::SeqCst);
+                        eprintln!("Completed transfer for {filename}");
+                        r
                     },
                 )
                 .await
@@ -1915,6 +1914,7 @@ mod test {
         })
         .await
         .unwrap();
+        eprintln!("All done!");
 
         assert!(success);
         // All N files should have been transferred.
@@ -1922,8 +1922,9 @@ mod test {
             stats.payload_bytes,
             u64::from(TRANSFER_N_FILES) * (TRANSFER_FILE_DATA.len() as u64)
         );
-        assert_eq!(tracker.conn_responses.lock().await.len(), 0);
+        let tracker = Arc::into_inner(wrapper).unwrap().into_inner();
+        assert_eq!(tracker.conn_responses.len(), 0);
         // At least one stream was opened.
-        assert!(tracker.peak_concurrent.lock().await.load(Ordering::SeqCst) >= 1);
+        assert!(tracker.peak_concurrent.load(Ordering::SeqCst) >= 1);
     }
 }

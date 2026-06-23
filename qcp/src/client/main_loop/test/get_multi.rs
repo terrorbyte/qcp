@@ -141,13 +141,15 @@ impl BiStreamOpener for TestPlumbingStreamsList {
     type Send = tokio::io::WriteHalf<tokio::io::SimplexStream>;
     type Recv = tokio::io::ReadHalf<tokio::io::SimplexStream>;
 
-    async fn open_bi_stream(&self) -> anyhow::Result<SendReceivePair<Self::Send, Self::Recv>> {
+    fn open_bi_stream(
+        &mut self,
+    ) -> impl Future<Output = anyhow::Result<SendReceivePair<Self::Send, Self::Recv>>> {
         let stream = self
             .client_streams
             .borrow_mut()
             .pop()
             .expect("Ran out of streams!");
-        Ok(stream)
+        std::future::ready(Ok(stream))
     }
 }
 impl TestPlumbingStreamsList {
