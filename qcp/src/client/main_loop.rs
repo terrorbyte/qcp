@@ -618,7 +618,7 @@ impl Client {
                         perms.set_mode(mode);
                     }
                     #[cfg(windows)]
-                    // As for files, map _any_ writeable bit into writeability.
+                    // As for files, map _any_ writable bit into writeability.
                     perms.set_readonly((mode & 0o222) == 0);
                     perms
                 });

@@ -59,7 +59,7 @@ impl FsMetadataExt for std::fs::Metadata {
             //
             // Then, if the user sets `--preserve`, they are explicitly instructing us to preserve permissions
             // as closely to the source as we can. If they do that, a read-write file on Windows becomes
-            // a world-writeable file on Unix (mode 0666).
+            // a world-writable file on Unix (mode 0666).
             // This is the same behaviour as the Windows port of OpenSSH.
             //
             // Windows has no concept of execute permission, so do not send that bit.
