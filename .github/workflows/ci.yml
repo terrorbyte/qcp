@@ -68,20 +68,16 @@ jobs:
           persist-credentials: false
       - run: cargo deny check ${{ matrix.checks }}
 
-  # Cheap, fast checks serve as a gate for the more time-consuming tasks
-  gate:
-    runs-on: ubuntu-slim
-    needs:
-      - checks
-      - cargo-deny
-    timeout-minutes: 1
-    steps:
-      - run: true
+  #
+  #
+  # Cheap, fast checks serve as a gate for the more time-consuming tasks below
+  #
+  #
 
   clippy:
     name: clippy @${{ matrix.rust-version }}
     runs-on: ubuntu-latest
-    needs: gate
+    needs: [checks, cargo-deny]
     timeout-minutes: 10
     strategy:
       fail-fast: false # useful for testing
@@ -113,7 +109,7 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
-    needs: gate
+    needs: [checks, cargo-deny]
     timeout-minutes: 10
     env:
       RUSTDOCFLAGS: -Dwarnings
@@ -139,8 +135,8 @@ jobs:
 
   test:
     uses: ./.github/workflows/test.yml
-    needs: gate
+    needs: [checks, cargo-deny]
 
   package:
     uses: ./.github/workflows/package.yml
-    needs: gate
+    needs: [checks, cargo-deny]
