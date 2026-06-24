@@ -565,7 +565,7 @@
     </p>
   </li>
   <li>
-    <p><code>--ssh-subsystem</code> — Ssh subsystem mode</p>
+    <p><code>--ssh-subsystem &lt;BOOL&gt;</code> — Ssh subsystem mode</p>
 
     <p>
       This mode causes qcp to run <code>ssh &lt;host&gt; -s qcp</code> instead
@@ -579,6 +579,8 @@
     </p>
 
     <p><code>Subsystem qcp /usr/local/bin/qcp --server</code></p>
+
+    <p>Possible values: <code>true</code>, <code>false</code></p>
   </li>
   <li>
     <p>
@@ -646,7 +648,8 @@
   </li>
   <li>
     <p>
-      <code>--aes256</code> — Use only AES256 cipher suites as far as possible
+      <code>--aes256 &lt;BOOL&gt;</code> — Use only AES256 cipher suites as far
+      as possible
     </p>
 
     <p>
@@ -654,6 +657,8 @@
       AES256-based algorithms (aka CNSA 2.0). Note this option does not fully
       disable AES128, which is required for the QUIC 1.0 Initial Packet.
     </p>
+
+    <p>Possible values: <code>true</code>, <code>false</code></p>
   </li>
   <li>
     <p>
@@ -696,7 +701,9 @@
 
     <p>
       A value of 1 (the default) gives the same sequential behaviour as previous
-      versions.
+      versions. Numbers much larger than the number of CPU cores available are
+      unlikely to improve performance, and you risk running into the kernel open
+      files limit.
     </p>
 
     <p>

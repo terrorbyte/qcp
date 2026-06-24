@@ -198,7 +198,7 @@ Number of files to transfer concurrently. [default: 1]
 
 Increasing this helps saturate the channel when transferring many small files, because each file\*(Aqs transfer can overlap with others rather than waiting for each to complete serially.
 
-A value of 1 (the default) gives the same sequential behaviour as previous versions.
+A value of 1 (the default) gives the same sequential behaviour as previous versions. Numbers much larger than the number of CPU cores available are unlikely to improve performance, and you risk running into the kernel open files limit.
 
 **Note:** With `parallel > 1`, the QUIC receive buffer grows proportionally; very large values on memory\-constrained systems may need `udp\-buffer` tuning.
 .TP
@@ -236,10 +236,20 @@ inet6: IPv6
 any: Unspecified. qcp will use whatever seems suitable given the target address or the result of DNS lookup
 .RE
 .TP
-\fB\-\-aes256\fR
+\fB\-\-aes256\fR [\fI<BOOL>\fR]
 Use only AES256 cipher suites as far as possible
 
 This option is included for those who have a preference to use only AES256\-based algorithms (aka CNSA 2.0). Note this option does not fully disable AES128, which is required for the QUIC 1.0 Initial Packet.
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+true
+.IP \(bu 2
+false
+.RE
 .TP
 \fB\-l\fR, \fB\-\-remote\-user\fR \fI<NAME>\fR
 The user on the remote machine to connect as.
@@ -282,7 +292,7 @@ By default, qcp reads your user and system ssh config files to look for Hostname
 
 This option is really intended to be used in a qcp configuration file. On the command line, you can repeat `\-\-ssh\-config file` as many times as needed.
 .TP
-\fB\-\-ssh\-subsystem\fR
+\fB\-\-ssh\-subsystem\fR [\fI<BOOL>\fR]
 Ssh subsystem mode
 
 This mode causes qcp to run `ssh <host> \-s qcp` instead of `ssh <host> qcp \-\-server`.
@@ -290,6 +300,16 @@ This mode causes qcp to run `ssh <host> \-s qcp` instead of `ssh <host> qcp \-\-
 This is useful where the remote system has a locked\-down `PATH` and the qcp binary is not resident on that `PATH`. The remote system sshd has to be configured with a line like this:
 
 `Subsystem qcp /usr/local/bin/qcp \-\-server`
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+true
+.IP \(bu 2
+false
+.RE
 .TP
 \fB\-\-timeout\fR \fI<seconds>\fR
 Connection timeout for the QUIC endpoints [seconds; default 5]
