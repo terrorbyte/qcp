@@ -1,0 +1,120 @@
+name: Cross-platform testing
+
+permissions: {}
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CLICOLOR_FORCE: 1
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  test:
+    name: ${{ matrix.target }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false # useful for testing
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            host: ubuntu-24.04
+            coverage: true
+            cache: true
+
+          # Not currently tested (too similar to x86_64)
+          #- target: aarch64-unknown-linux-musl
+          #  host: ubuntu-24.04-arm
+          #  update_rust: true
+
+          # Not currently tested (too similar to aarch64)
+          #- target: x86_64-apple-darwin
+          #  host: macos-14
+
+          - target: aarch64-apple-darwin
+            host: macos-14
+            cache: true
+
+          # freebsd cross-builds as of 31 Mar 2025 but is untested.
+          #- target: x86_64-unknown-freebsd
+          #  host: ubuntu-24.04
+
+          # netbsd rust support is tier 2; as of 31 Mar 2025 the crossbuild fails to link (cannot find -lexecinfo).
+
+          # openbsd rust support is tier 3; as of 31 Mar 2025 it has no stable or nightly build.
+
+          #- target: x86_64-pc-windows-msvc
+          #  host: windows-2025
+          #- target: x86_64-pc-windows-gnullvm
+          #  host: ubuntu-24.04
+          - target: x86_64-pc-windows-gnu
+            host: ubuntu-24.04
+            cache: true
+
+    runs-on: ${{ matrix.host }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # 6.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/setup-cross-toolchain-action@15a579e0045e5e4f668b73a441b9609884abffc9 # v1.37.0
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Additional Rust components for coverage
+        if: ${{ matrix.coverage }}
+        run: rustup component add llvm-tools rust-src
+
+      - name: Install coverage tools
+        uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2.82.3
+        if: ${{ matrix.coverage }}
+        # this action is used in multiple places
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+          checksum: true
+
+      ####### Ensure all tools are loaded before rust-cache, or they will be cached themselves ######
+      # 31 Mar 2025: Disabled cacheing.
+      # Full cacheing with `cache-targets` saves 30-40s per platform, but at a high space cost.
+      # Cacheing with cache-targets: false is a net slowdown.
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        # this action is used in multiple places
+        with:
+          # As we run tests for mingw on linux, the standard cache key arrangement (name/platform) doesn't suit.
+          shared-key: test
+          key: ${{ matrix.target }}
+          cache-on-failure: true
+          cache-targets: true
+          save-if: ${{ github.ref == 'refs/heads/dev' }}
+        if: ${{ matrix.cache }}
+
+      - run: cargo test --locked --no-fail-fast
+        if: ${{ !matrix.coverage }}
+
+      - name: Run coverage tests
+        if: ${{ matrix.coverage }}
+        # We run this on stable as we currently prefer cacheability over tracking nightly features.
+        # Note that this invocation does not include doctests, which are only supported with a nightly compiler.
+        run: ./scripts/coverage --ci
+
+      - name: Upload coverage artifact
+        if: ${{ matrix.coverage }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: lcov.info
+          path: target/coverage/lcov.info
+      #- name: Send result to coveralls
+      #  uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b # v2.3.6
+      #  continue-on-error: true
+
+      - name: Send result to codecov
+        if: ${{ matrix.coverage }}
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          #files: lcov.info # not needed, it autodetects
+          #verbose: true # not needed
+          name: lcov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

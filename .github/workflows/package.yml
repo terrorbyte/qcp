@@ -1,19 +1,14 @@
-name: Cross-platform packaging and testing
+name: Cross-platform packaging
 
 permissions: {}
 
 on:
   workflow_call:
     inputs:
-      package:
-        type: boolean
-        default: false
-      test:
-        type: boolean
-        default: false
       release:
         type: boolean
         default: false
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,8 +17,9 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  platform:
-    timeout-minutes: 30
+  package:
+    name: ${{ matrix.target }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false # useful for testing
       matrix:
@@ -31,6 +27,7 @@ jobs:
           - target: x86_64-unknown-linux-musl
             host: ubuntu-24.04
             archive_fragment: linux-x86_64-musl
+            cache: true
 
           - target: aarch64-unknown-linux-musl
             host: ubuntu-24.04-arm
@@ -63,7 +60,7 @@ jobs:
 
     runs-on: ${{ matrix.host }}
     env:
-      Q_BUILD_DEB: ${{ inputs.package && contains(matrix.target, 'linux') && '1' || '0' }}
+      Q_BUILD_DEB: ${{ contains(matrix.target, 'linux') && '1' || '0' }}
       Q_PACKAGE_ZIP: ${{ contains(matrix.target, 'windows') && 'all' || 'none' }}
       Q_PACKAGE_TAR: ${{ contains(matrix.target, 'windows') && 'none' || 'all' }}
       ##### Packaging variations per-platform
@@ -79,12 +76,11 @@ jobs:
         with:
           target: ${{ matrix.target }}
       - name: Additional rust tools for packaging
-        uses: taiki-e/install-action@33734a118689b0b418824fb78ea2bf18e970b43b # v2.50.4
+        uses: taiki-e/install-action@ace6ebe54a6a0c86dfb5f7764b17f793b6925bc3 # v2.82.3
         # this action is used in multiple places
         with:
           tool: cargo-cyclonedx@0.5.7${{ env.Q_BUILD_DEB == '1' && ',cargo-deb@3.6.0' || ''}}
           checksum: true
-        if: inputs.package
 
       - name: Update Rust
         run: rustup update stable
@@ -97,22 +93,19 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         # this action is used in multiple places
         with:
-          key: ${{ inputs.test && 'test' || 'package' }}
+          # As we package for mingw on linux, the standard cache key arrangement (name/platform) doesn't suit.
+          shared-key: package
+          key: ${{ matrix.target }}
           cache-on-failure: true
           cache-targets: true
           save-if: ${{ github.ref == 'refs/heads/dev' }}
         if: ${{ matrix.cache }}
 
-      - run: cargo test --locked --no-fail-fast
-        if: inputs.test
-
-      - run: cargo cyclonedx --target ${{ matrix.target }}
-        if: inputs.package
+      - run: cargo cyclonedx --target ${{ matrix.target }} --verbose
 
       - name: Build binary package
         uses: taiki-e/upload-rust-binary-action@3962470d6e7f1993108411bc3f75a135ec67fc8c # v1.27.0
         id: build-binary
-        if: inputs.package
         with:
           bin: qcp
           dry-run: true
@@ -139,7 +132,7 @@ jobs:
           tar: ${{ env.Q_PACKAGE_TAR }}
           zip: ${{ env.Q_PACKAGE_ZIP }}
       - name: Upload binary package to CI result
-        if: ${{ inputs.package && ( success() || failure() ) }}
+        if: ${{ success() || failure() }}
         # always try to do this if packaging, it allows the package to be checked
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
