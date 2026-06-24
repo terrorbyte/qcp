@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/crazyscot/qcp/compare/v0.8.3...v0.9.0)
+
+### ⛰️ Features
+
+- *(protocol)* Add compatibility Level 5 - ([41fe742](https://github.com/crazyscot/qcp/commit/41fe742a11835c17d8d4efd0a5b3541d5d1b259f))
+- Add automatic parent directory creation for PUT and GET commands - ([4386c82](https://github.com/crazyscot/qcp/commit/4386c82625096996592c6f928874191d3fbb65b4))
+- Add --skip-existing option to skip files with the same size - ([169995c](https://github.com/crazyscot/qcp/commit/169995cb385de4473dae9b00a33367014b73ba2b))
+- Consolidate parallel transfer improvements - ([08e6433](https://github.com/crazyscot/qcp/commit/08e64339ed9f67ca6a3bf9ccd5977d8ad6386f31))
+
+### 🐛 Bug Fixes
+
+- *(test)* Apply provided patch for failing test - ([3ff7119](https://github.com/crazyscot/qcp/commit/3ff7119279cf35f18e4c411cbdfc49da1e0090b9))
+- Allow aes256 to be set in config file - ([dcae896](https://github.com/crazyscot/qcp/commit/dcae8969f7a5ca8477528a272463a409e9245f1c))
+- Client-server deadlock with too many parallel transfers - ([51d58a0](https://github.com/crazyscot/qcp/commit/51d58a0ab181ed4d5ae6c0af94eb74a65550ef86))
+
+### 📚 Documentation
+
+- Add notes on parallel (-j) mode - ([a7bbbdd](https://github.com/crazyscot/qcp/commit/a7bbbdd1b8d050ad0161eb76ecea637096b24c75))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update warnings for options requested but not available on remote - ([31a16d7](https://github.com/crazyscot/qcp/commit/31a16d721636e61ee4607f043b960d400dd04952))
+- Remove async_trait crate - ([db2fa58](https://github.com/crazyscot/qcp/commit/db2fa58b537b06e3e231a573588af09c5813d9f3))
+
+### 🚜 Refactor
+
+- *(put)* Simplify destination path checks - ([e0eab56](https://github.com/crazyscot/qcp/commit/e0eab5688e55c3639ae00ab87b486dead1b36479))
+- *(tests)* Improve macOS ignore messages for clarity - ([e6f86b1](https://github.com/crazyscot/qcp/commit/e6f86b161fa8918a20d76eb6101e17ab2056f8de))
+- Job request processing fns take an Arc<Mutex<BiStreamOpener>> - ([8f53489](https://github.com/crazyscot/qcp/commit/8f534894314d23efccce2d5b9b1e05d306748698))
+
+
 ## [0.8.3](https://github.com/crazyscot/qcp/compare/v0.8.2...v0.8.3)
 
 ### 🛡️ Security
