@@ -524,6 +524,25 @@ mod test {
     }
 
     #[test]
+    fn parse_aes256_tristate() {
+        let args = ["qcp"];
+        let result = CliArgs::custom_parse(args).unwrap();
+        assert_eq!(result.config.aes256, None);
+
+        let args = ["qcp", "--aes256"];
+        let result = CliArgs::custom_parse(args).unwrap();
+        assert_eq!(result.config.aes256, Some(true));
+
+        let args = ["qcp", "--aes256", "true"];
+        let result = CliArgs::custom_parse(args).unwrap();
+        assert_eq!(result.config.aes256, Some(true));
+
+        let args = ["qcp", "--aes256", "false"];
+        let result = CliArgs::custom_parse(args).unwrap();
+        assert_eq!(result.config.aes256, Some(false));
+    }
+
+    #[test]
     fn cli_option_capitalisation() {
         let args = &[
             "qcp",

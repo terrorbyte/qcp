@@ -454,7 +454,9 @@ For example, to pass `-i /dev/null` to ssh, specify: `-S -i -S /dev/null`"
     #[arg(
         long,
         alias("subsystem"),
-        action = clap::ArgAction::SetTrue,
+        default_missing_value("true"), // to support `--ssh-subsystem` without a value
+        num_args(0..=1),
+        value_name("BOOL"),
         help_heading("Connection"),
         display_order(0)
     )]
@@ -476,7 +478,7 @@ For example, to pass `-i /dev/null` to ssh, specify: `-S -i -S /dev/null`"
     #[arg(
         long,
         alias("colour"),
-        default_missing_value("always"), // to support `--color`
+        default_missing_value("always"), // to support `--color` without a value
         num_args(0..=1),
         value_name("MODE"),
         ignore_case(true),
@@ -518,7 +520,9 @@ CLI options take precedence over the configuration file, which takes precedence 
     /// the QUIC 1.0 Initial Packet.
     #[arg(
         long,
-        action = clap::ArgAction::SetTrue,
+        default_missing_value("true"), // to support `--aes256` without a value
+        num_args(0..=1),
+        value_name("BOOL"),
         display_order(0),
         help_heading("Connection"),
     )]
